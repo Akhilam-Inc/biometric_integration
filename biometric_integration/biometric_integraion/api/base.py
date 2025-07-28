@@ -3,7 +3,7 @@ import frappe
 from datetime import datetime
 import json
 from enum import Enum
-from biometric_integration.biometric_integration.api.utils import {
+from biometric_integration.api.utils import {
     create_biometric_log
 }
 
