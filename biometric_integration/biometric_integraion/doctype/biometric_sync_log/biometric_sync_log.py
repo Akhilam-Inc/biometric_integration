@@ -120,7 +120,7 @@ def bulk_retry(names):
 		_retry_job(name)
 
 import frappe
-from biometric_integration.biometric_integration.api.base import BiometricApiClient
+from biometric_integration.api.base import BiometricApiClient
 
 @frappe.whitelist()
 def fetch_device_logs_background():
