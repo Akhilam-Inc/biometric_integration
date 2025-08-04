@@ -206,7 +206,7 @@ def process_device_logs(response_text):
                 "employee": employee,
                 "time": log_time,
                 "device_id": location,
-				"type": "IN"
+				"log_type": "IN"
             }).insert(ignore_permissions=True)
             created += 1
         except Exception as e:
