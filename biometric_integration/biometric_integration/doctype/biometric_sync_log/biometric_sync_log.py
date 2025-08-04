@@ -164,6 +164,7 @@ def process_device_logs(response_text):
         result = result_tag.text.strip()
     
     if not result:
+        frappe.log_error(title = "No logs found in the response." , message=result_tag)
         frappe.throw("No logs found in the response.")
 
     logs = result.split(";\n")
@@ -205,6 +206,7 @@ def process_device_logs(response_text):
                 "employee": employee,
                 "time": log_time,
                 "device_id": location,
+				"type": "IN"
             }).insert(ignore_permissions=True)
             created += 1
         except Exception as e:
