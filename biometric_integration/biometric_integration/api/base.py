@@ -39,7 +39,7 @@ class BiometricApiClient:
                 method=self.get_device_logs.__name__, request_data=body, make_new=True
             )
             frappe.flags.request_id = log.name
-            response = requests.post(self.base_url, data=body, headers={**self.headers , **{"SOAPAction": "\"http://tempuri.org/GetDeviceLogs\""}}, timeout=30)
+            response = requests.post(self.base_url, data=body, headers={**self.headers , **{"SOAPAction": "http://tempuri.org/GetDeviceLogs"}}, timeout=30)
 
             if response.status_code == 200:
                 create_biometric_log(message = "Device Log Fetched Successfully" ,response_data = response.text, status = "Success")
@@ -71,7 +71,7 @@ class BiometricApiClient:
         """Send SOAP request to get device logs for a given date (YYYY-MM-DD or YYYY/MM/DD)"""
         try:
             frappe.flags.request_id = request_id
-            response = requests.post(self.base_url, data=payload, headers={**self.headers , **{"SOAPAction": "\"http://tempuri.org/GetDeviceLogs\""}}, timeout=30)
+            response = requests.post(self.base_url, data=payload, headers={**self.headers , **{"SOAPAction": "http://tempuri.org/GetDeviceLogs"}}, timeout=30)
 
             if response.status_code == 200:
                 create_biometric_log(message = "Device Log Fetched Successfully" ,response_data = response.text, status = "Success")
