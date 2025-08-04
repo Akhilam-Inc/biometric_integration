@@ -142,6 +142,7 @@ def fetch_and_log_device_logs():
     logs_data = client.get_device_logs()
     if logs_data["status"] == "success":
         process_device_logs(logs_data["data"])
+		
 
 def retry_logs(payload , request_id):
     client = BiometricApiClient()

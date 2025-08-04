@@ -19,7 +19,7 @@ class BiometricApiClient:
         self.base_url = self.settings.endpoint_url.rstrip("/") + "/iclock/webservice.asmx"
         self.username = self.settings.api_user
         self.password = self.settings.get_password("api_password")
-        self.location = ""
+        self.location = self.settings.location
         self.last_sync_date = self.settings.last_sync_date
 
         self.headers = {

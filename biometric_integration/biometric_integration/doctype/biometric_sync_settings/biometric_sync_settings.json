@@ -9,6 +9,7 @@
   "api_password",
   "last_sync_date",
   "column_break_bvjr",
+  "location",
   "endpoint_url",
   "sync_logs"
  ],
@@ -48,13 +49,18 @@
    "fieldtype": "Date",
    "label": "Last Sync Date",
    "reqd": 1
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Data",
+   "label": "Location",
+   "reqd": 1
   }
  ],
- "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-07-28 16:03:58.081780",
+ "modified": "2025-08-04 10:25:15.782935",
  "modified_by": "Administrator",
  "module": "Biometric Integration",
  "name": "Biometric Sync Settings",
@@ -71,7 +77,6 @@
    "write": 1
   }
  ],
- "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": []
