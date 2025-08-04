@@ -126,90 +126,95 @@ def bulk_retry(names):
 
 @frappe.whitelist()
 def fetch_device_logs_background():
-    """Call this from JS to enqueue a background job."""
-    frappe.enqueue(
-        method=fetch_and_log_device_logs,
-       	queue="short",
+	"""Call this from JS to enqueue a background job."""
+	frappe.enqueue(
+		method=fetch_and_log_device_logs,
+		queue="short",
 		timeout=300,
 		is_async= True
-    )
-    return "Enqueued. Please check Biometric Sync Log for status."
+	)
+	return "Enqueued. Please check Biometric Sync Log for status."
 
 
 def fetch_and_log_device_logs():
-    """Actual background job that fetches and logs biometric data."""
-    client = BiometricApiClient()
-    logs_data = client.get_device_logs()
-    if logs_data["status"] == "success":
-        process_device_logs(logs_data["data"])
+	"""Actual background job that fetches and logs biometric data."""
+	client = BiometricApiClient()
+	logs_data = client.get_device_logs()
+	if logs_data["status"] == "success":
+		process_device_logs(logs_data["data"])
+		sync_settings = frappe.get_single("Biometric Sync Settings")
+		current_sync_date = frappe.utils.getdate(sync_settings.last_sync_date)
+		next_sync_date = frappe.utils.add_days(current_sync_date, 1)
+		sync_settings.last_sync_date = next_sync_date
+		sync_settings.save(ignore_permissions=True)
 		
 
 def retry_logs(payload , request_id):
-    client = BiometricApiClient()
-    logs_data = client.retry_get_device_logs(payload , request_id)
-    if logs_data["status"] == "success":
-        process_device_logs(logs_data["data"])
+	client = BiometricApiClient()
+	logs_data = client.retry_get_device_logs(payload , request_id)
+	if logs_data["status"] == "success":
+		process_device_logs(logs_data["data"])
 
 def process_device_logs(response_text):
-    ns = {
-        "soap": "http://schemas.xmlsoap.org/soap/envelope/",
-        "ns1": "http://tempuri.org/"
-    }
+	ns = {
+		"soap": "http://schemas.xmlsoap.org/soap/envelope/",
+		"ns1": "http://tempuri.org/"
+	}
 
-    root = ET.fromstring(response_text)
-    result_tag = root.find(".//ns1:GetDeviceLogsResult", ns)
-    result = None
+	root = ET.fromstring(response_text)
+	result_tag = root.find(".//ns1:GetDeviceLogsResult", ns)
+	result = None
 	
-    if result_tag is not None and result_tag.text:
-        result = result_tag.text.strip()
-    
-    if not result:
-        frappe.log_error(title = "No logs found in the response." , message=result_tag)
-        frappe.throw("No logs found in the response.")
+	if result_tag is not None and result_tag.text:
+		result = result_tag.text.strip()
+	
+	if not result:
+		frappe.log_error(title = "No logs found in the response." , message=result_tag)
+		frappe.throw("No logs found in the response.")
 
-    logs = result.split(";\n")
-    
-    created = 0
-    for line in logs:
-        if not line.strip():
-            continue
-        
-        try:
-            parts = line.split(",")
-            log_time_str = parts[0].strip()
-            device_id = parts[1].strip()
-            location = parts[3].strip()
+	logs = result.split(";\n")
+	
+	created = 0
+	for line in logs:
+		if not line.strip():
+			continue
+		
+		try:
+			parts = line.split(",")
+			log_time_str = parts[0].strip()
+			device_id = parts[1].strip()
+			location = parts[3].strip()
 
-            # Step 1: Convert time
-            log_time = get_datetime(log_time_str)
+			# Step 1: Convert time
+			log_time = get_datetime(log_time_str)
 
-            # Step 2: Find Employee
-            employee = frappe.db.get_value("Employee", {"attendance_device_id": device_id})
-            if not employee:
-                frappe.logger().info(f"No employee found for device_id: {device_id}")
-                continue
+			# Step 2: Find Employee
+			employee = frappe.db.get_value("Employee", {"attendance_device_id": device_id})
+			if not employee:
+				frappe.logger().info(f"No employee found for device_id: {device_id}")
+				continue
 
-            # Step 3: Avoid duplicate check-ins
-            exists = frappe.db.exists(
-                "Employee Checkin",
-                {
-                    "employee": employee,
-                    "time": log_time,
-                },
-            )
-            if exists:
-                continue
+			# Step 3: Avoid duplicate check-ins
+			exists = frappe.db.exists(
+				"Employee Checkin",
+				{
+					"employee": employee,
+					"time": log_time,
+				},
+			)
+			if exists:
+				continue
 
-            # Step 4: Insert Employee Checkin
-            frappe.get_doc({
-                "doctype": "Employee Checkin",
-                "employee": employee,
-                "time": log_time,
-                "device_id": location,
+			# Step 4: Insert Employee Checkin
+			frappe.get_doc({
+				"doctype": "Employee Checkin",
+				"employee": employee,
+				"time": log_time,
+				"device_id": location,
 				"log_type": "IN"
-            }).insert(ignore_permissions=True)
-            created += 1
-        except Exception as e:
-            frappe.log_error(title= "Employee Checkin" , message=f"Error processing line: {line}\n{frappe.get_traceback()}")
+			}).insert(ignore_permissions=True)
+			created += 1
+		except Exception as e:
+			frappe.log_error(title= "Employee Checkin" , message=f"Error processing line: {line}\n{frappe.get_traceback()}")
 
-    return f"{created} Employee Checkin(s) created."
+	return f"{created} Employee Checkin(s) created."
