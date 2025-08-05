@@ -231,7 +231,7 @@ def attendance_log():
 
 	try:
 		# Try to parse JSON payload
-		data = frappe.request.get_json()
+		data = frappe.request.json
 
 		# You can log it, process it, or store it
 		frappe.log_error(title = "Employee Checkin Data" ,message=f"Received Webhook: {json.dumps(data, indent=4)}")
