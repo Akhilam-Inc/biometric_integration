@@ -230,8 +230,11 @@ def attendance_log():
 		return {"error": "Method Not Allowed"}
 
 	try:
-		# Try to parse JSON payload
-		data = frappe.request.json
+		data = frappe.request.data  # raw bytes
+		if isinstance(data, bytes):
+			data = data.decode("utf-8")
+
+		data = json.loads(data)  # parse to Python list/dict
 
 		# You can log it, process it, or store it
 		frappe.log_error(title = "Employee Checkin Data" ,message=f"Received Webhook: {json.dumps(data, indent=4)}")
