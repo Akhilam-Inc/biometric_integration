@@ -218,3 +218,62 @@ def process_device_logs(response_text):
 			frappe.log_error(title= "Employee Checkin" , message=f"Error processing line: {line}\n{frappe.get_traceback()}")
 
 	return f"{created} Employee Checkin(s) created."
+
+@frappe.whitelist(allow_guest=True)
+def attendance_log():
+	import json
+	from frappe.utils.response import build_response
+
+	# Only allow POST
+	if frappe.request.method != "POST":
+		frappe.local.response.http_status_code = 405
+		return {"error": "Method Not Allowed"}
+
+	try:
+		# Try to parse JSON payload
+		data = frappe.request.get_json()
+
+		# You can log it, process it, or store it
+		frappe.log_error(title = "Employee Checkin Data" ,message=f"Received Webhook: {json.dumps(data, indent=4)}")
+		created = 0
+
+		for entry in data:
+			device_id = entry.get("EmployeeCode")
+			log_time_str = entry.get("LogDate")
+			location = entry.get("DeviceName") or entry.get("SerialNumber")
+
+			# Step 1: Convert time
+			log_time = get_datetime(log_time_str)
+
+			# Step 2: Find Employee
+			employee = frappe.db.get_value("Employee", {"attendance_device_id": device_id})
+			if not employee:
+				frappe.logger().info(f"No employee found for device_id: {device_id}")
+				continue
+
+			# Step 3: Avoid duplicate check-ins
+			exists = frappe.db.exists(
+				"Employee Checkin",
+				{
+					"employee": employee,
+					"time": log_time,
+				},
+			)
+			if exists:
+				continue
+
+			# Step 4: Insert Employee Checkin
+			frappe.get_doc({
+				"doctype": "Employee Checkin",
+				"employee": employee,
+				"time": log_time,
+				"device_id": location,
+				"log_type": "IN",  # optionally use entry.get("DeviceDirection") or similar if needed
+			}).insert(ignore_permissions=True)
+			
+			created += 1
+		return "success"
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Webhook Handler Error")
+		frappe.local.response.http_status_code = 500
+		return {"status": "error", "message": str(e)}
