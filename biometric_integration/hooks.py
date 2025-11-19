@@ -169,6 +169,11 @@ scheduler_events = {
     "daily": [
 		"biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.fetch_and_log_device_logs"
 	],
+    "0 9,10,11,18,19,20 * * *": [
+		"biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.fetch_and_log_device_logs"
+	],
+    
+    
 }
 # Testing
 # -------
