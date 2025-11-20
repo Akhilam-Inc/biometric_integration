@@ -136,6 +136,11 @@ def fetch_device_logs_background():
 	return "Enqueued. Please check Biometric Sync Log for status."
 
 
+def fetch_device_logs():
+	"""Fetch and log biometric data immediately (not in background)."""
+	fetch_and_log_device_logs()
+	return "Completed. Please check Biometric Sync Log for status."
+
 def fetch_and_log_device_logs():
 	"""Actual background job that fetches and logs biometric data."""
 	client = BiometricApiClient()

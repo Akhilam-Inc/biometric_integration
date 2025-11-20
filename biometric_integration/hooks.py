@@ -171,7 +171,7 @@ scheduler_events = {
 	],
     "cron" : {
 		"16 10 * * *": [
-			"biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.fetch_and_log_device_logs"
+			"biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.fetch_device_logs"
 		]
 	}
 }
