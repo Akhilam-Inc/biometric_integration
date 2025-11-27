@@ -138,7 +138,21 @@ def fetch_device_logs_background():
 
 def fetch_device_logs():
 	"""Fetch and log biometric data immediately (not in background)."""
-	fetch_and_log_device_logs()
+	client = BiometricApiClient()
+	logs_data = client.get_device_logs()
+	if logs_data["status"] == "success":
+		if logs_data["type"] == "Bio Server":
+			process_device_logs(logs_data["data"])
+			sync_settings = frappe.get_single("Biometric Sync Settings")
+			current_sync_date = frappe.utils.getdate(sync_settings.last_sync_date)
+			next_sync_date = frappe.utils.add_days(current_sync_date, 1)
+			sync_settings.last_sync_date = next_sync_date
+			sync_settings.save(ignore_permissions=True)
+		if logs_data["type"] == "eTime Tracker Lite":
+			process_device_logs_etime_day(logs_data["data"])
+			sync_settings = frappe.get_single("Biometric Sync Settings")
+			sync_settings.last_sync_datetime = frappe.utils.now_datetime()
+			sync_settings.save(ignore_permissions=True)
 	return "Completed. Please check Biometric Sync Log for status."
 
 def fetch_and_log_device_logs():
@@ -380,7 +394,7 @@ def process_device_logs(response_text):
 #         f"{created_in} IN created, {created_out} OUT created. "
 #         f"(skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})"
 #     )
-def process_device_logs_etime(response_text):
+def process_device_logs_etime_day(response_text):
     """
     Processes Bio Server SOAP GetTransactionsLog response.
 
@@ -492,6 +506,136 @@ def process_device_logs_etime(response_text):
                         "time": log_time,
                         "device_id": serial_number,
                         "log_type": "IN",  # kept as IN for all entries; change if needed
+                    }).insert(ignore_permissions=True)
+                    created += 1
+                else:
+                    skipped_dupe += 1
+
+        except Exception:
+            employee_errors += 1
+            frappe.log_error(
+                title="Bio Server: Checkin insert error for employee group",
+                message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
+            )
+
+    return (
+        f"{created} entries created. "
+        f"(skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})"
+    )
+
+def process_device_logs_etime(response_text):
+    """
+    Processes Bio Server SOAP GetTransactionsLog response.
+
+    Groups lines by employee code and creates an Employee Checkin for
+    every timestamp returned by the device (skips duplicates).
+    """
+    ns = {
+        "soap": "http://www.w3.org/2003/05/soap-envelope",
+        "t": "http://tempuri.org/",
+    }
+
+    try:
+        root = ET.fromstring(response_text)
+    except ET.ParseError as e:
+        frappe.log_error(title="Bio Server XML parse error", message=str(e))
+        frappe.throw("Failed to parse Bio Server response.")
+
+    body = root.find("soap:Body", ns)
+    if body is None:
+        frappe.log_error(title="Bio Server SOAP error", message="Missing SOAP Body")
+        frappe.throw("Invalid response from Bio Server (no SOAP Body).")
+
+    resp = body.find("t:GetTransactionsLogResponse", ns)
+    if resp is None:
+        fault = body.find("soap:Fault", ns)
+        if fault is not None:
+            frappe.log_error(title="Bio Server SOAP Fault", message=ET.tostring(fault, encoding="unicode"))
+            frappe.throw("Bio Server returned a SOAP fault.")
+        frappe.log_error(title="Bio Server SOAP error", message="Missing GetTransactionsLogResponse")
+        frappe.throw("Invalid response from Bio Server.")
+
+    data_el = resp.find("t:strDataList", ns)
+    if data_el is None:
+        frappe.log_error(title="Bio Server: strDataList missing", message=ET.tostring(resp, encoding="unicode"))
+        frappe.throw("No logs found in the response.")
+
+    blob = (data_el.text or "").strip()
+    if not blob:
+        frappe.throw("No logs found in the response.")
+
+    # For device_id on checkins, prefer configured serial number
+    serial_number = None
+    try:
+        settings = frappe.get_single("Biometric Sync Settings")
+        serial_number = (settings.serial_no or "").strip() or "eTime Tracker Lite"
+    except Exception:
+        serial_number = "eTime Tracker Lite"
+
+    # Counters
+    created = 0
+    skipped_no_emp = 0
+    skipped_dupe = 0
+    skipped_bad_line = 0
+    employee_errors = 0
+
+    # Group timestamps by emp_code
+    logs_by_emp = {}
+
+    # Each line typically: EMP_CODE \t YYYY-MM-DD HH:MM:SS \t ...
+    for raw_line in blob.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        try:
+            parts = [p.strip() for p in line.split("\t") if p.strip() != ""]
+            if len(parts) < 2:
+                skipped_bad_line += 1
+                continue
+
+            emp_code = parts[0]
+            ts_str = parts[1]
+
+            # Parse timestamp (Bio Server sample uses YYYY-MM-DD HH:MM:SS)
+            log_time = get_datetime(ts_str)
+
+            # append to group
+            logs_by_emp.setdefault(emp_code, []).append(log_time)
+
+        except Exception:
+            skipped_bad_line += 1
+            frappe.log_error(
+                title="Bio Server: line parse error",
+                message=f"Line: {raw_line}\n{frappe.get_traceback()}",
+            )
+
+    # Now process each employee group
+    for emp_code, times in logs_by_emp.items():
+        try:
+            # Normalize unique datetimes and sort
+            unique_times = sorted(set(times))
+            if not unique_times:
+                continue
+
+            # Find Employee by attendance_device_id == emp_code
+            employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
+            if not employee:
+                skipped_no_emp += 1
+                frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
+                continue
+            last_time = unique_times[-1]
+            # Insert a checkin for every timestamp (log them as-is)
+            for log_time in unique_times:
+                log_type = "OUT" if log_time == last_time else "IN"
+                # check duplicate existence
+                if not frappe.db.exists("Employee Checkin", {"employee": employee, "time": log_time}):
+                    frappe.get_doc({
+                        "doctype": "Employee Checkin",
+                        "employee": employee,
+                        "time": log_time,
+                        "device_id": serial_number,
+                        "log_type": log_type,  # kept as IN for all entries; change if needed
                     }).insert(ignore_permissions=True)
                     created += 1
                 else:
