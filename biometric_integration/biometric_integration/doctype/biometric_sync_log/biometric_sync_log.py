@@ -242,7 +242,7 @@ def process_device_logs(response_text):
 				"log_type": "IN"
 			}).insert(ignore_permissions=True)
 			created += 1
-		except Exception as e:
+		except Exception:
 			frappe.log_error(title= "Employee Checkin" , message=f"Error processing line: {line}\n{frappe.get_traceback()}")
 
 	return f"{created} Employee Checkin(s) created."
@@ -657,7 +657,6 @@ def process_device_logs_etime(response_text):
 @frappe.whitelist(allow_guest=True)
 def attendance_log():
 	import json
-	from frappe.utils.response import build_response
 
 	# Only allow POST
 	if frappe.request.method != "POST":

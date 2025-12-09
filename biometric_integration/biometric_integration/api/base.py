@@ -1,8 +1,7 @@
 import requests
 import frappe
 from datetime import datetime, date, time
-from frappe.utils import get_datetime, getdate, now_datetime
-import json
+from frappe.utils import get_datetime
 from enum import Enum
 import textwrap
 
