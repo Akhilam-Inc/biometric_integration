@@ -15,7 +15,7 @@ app_license = "mit"
 # 	{
 # 		"name": "biometric_integration",
 # 		"logo": "/assets/biometric_integration/logo.png",
-# 		"title": "Biometric Integration",
+# 		"title": "Biometric Integraion",
 # 		"route": "/biometric_integration",
 # 		"has_permission": "biometric_integration.api.permission.has_app_permission"
 # 	}
