@@ -1,11 +1,10 @@
-import requests
-import frappe
 from datetime import datetime
-import json
 from enum import Enum
-from biometric_integration.api.utils import {
-    create_biometric_log
-}
+
+import frappe
+import requests
+from biometric_integration.api.utils import create_biometric_log
+
 
 class SupportedHTTPMethod(Enum):
     GET = "GET"
@@ -82,7 +81,9 @@ class BiometricApiClient:
 </soap:Envelope>"""
 
     def _format_log_date(self, date_input) -> str:
-    """Convert various date formats to 'YYYY/MM/DD'"""
+        """
+        Convert various date formats to 'YYYY/MM/DD'
+        """
         if isinstance(date_input, str):
             # Parse string to date if necessary
             try:
