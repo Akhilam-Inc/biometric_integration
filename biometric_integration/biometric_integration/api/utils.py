@@ -2,5 +2,6 @@ from biometric_integration.biometric_integration.doctype.biometric_sync_log.biom
 	create_log,
 )
 
+
 def create_biometric_log(**kwargs):
 	return create_log(**kwargs)

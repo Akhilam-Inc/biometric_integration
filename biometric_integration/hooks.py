@@ -166,14 +166,14 @@ app_license = "mit"
 # 	],
 # }
 scheduler_events = {
-    "daily": [
+	"daily": [
 		"biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.fetch_and_log_device_logs"
 	],
-    "cron" : {
+	"cron": {
 		"15 11 * * *": [
 			"biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.fetch_device_logs"
 		]
-	}
+	},
 }
 # Testing
 # -------
@@ -250,4 +250,3 @@ scheduler_events = {
 # default_log_clearing_doctypes = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
-
