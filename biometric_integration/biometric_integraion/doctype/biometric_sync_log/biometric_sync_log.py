@@ -11,6 +11,7 @@ from frappe.query_builder.functions import Now
 from frappe.utils import strip_html
 from frappe.utils.data import cstr
 
+
 class BiometricSyncLog(Document):
 	def validate(self):
 		self._set_title()
@@ -32,7 +33,7 @@ class BiometricSyncLog(Document):
 	def clear_old_logs(days=90):
 		table = frappe.qb.DocType("Biometric Sync Log")
 		frappe.db.delete(
-			table, filters=((table.modified < (Now() - Interval(days=days)))) & (table.status == "Success")
+			table, filters=(table.modified < (Now() - Interval(days=days))) & (table.status == "Success")
 		)
 
 
@@ -119,22 +120,20 @@ def bulk_retry(names):
 	for name in names:
 		_retry_job(name)
 
+
 import frappe
+
 from biometric_integration.api.base import BiometricApiClient
+
 
 @frappe.whitelist()
 def fetch_device_logs_background():
-    """Call this from JS to enqueue a background job."""
-    frappe.enqueue(
-        method=fetch_and_log_device_logs,
-        queue="default",
-        now=True,
-		is_async= True
-    )
-    return "Enqueued. Please check Biometric Sync Log for status."
+	"""Call this from JS to enqueue a background job."""
+	frappe.enqueue(method=fetch_and_log_device_logs, queue="default", now=True, is_async=True)
+	return "Enqueued. Please check Biometric Sync Log for status."
 
 
 def fetch_and_log_device_logs():
-    """Actual background job that fetches and logs biometric data."""
-    client = BiometricApiClient()
-    client.get_device_logs()
+	"""Actual background job that fetches and logs biometric data."""
+	client = BiometricApiClient()
+	client.get_device_logs()
