@@ -3,7 +3,7 @@ name = "biometric_integration"
 authors = [
     { name = "Akhilam Inc.", email = "parth@akhilaminc.com"}
 ]
-description = "Biometri integration by Akhilam Inc."
+description = "Biometric Integration"
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]

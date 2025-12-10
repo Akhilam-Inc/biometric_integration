@@ -1,7 +1,7 @@
 app_name = "biometric_integration"
-app_title = "Biometric Integraion"
+app_title = "Biometric Integration"
 app_publisher = "Akhilam Inc."
-app_description = "Biometri integration by Akhilam Inc."
+app_description = "Biometric Integration"
 app_email = "parth@akhilaminc.com"
 app_license = "mit"
 
@@ -165,7 +165,16 @@ app_license = "mit"
 # 		"biometric_integration.tasks.monthly"
 # 	],
 # }
-
+scheduler_events = {
+	"daily": [
+		"biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.fetch_and_log_device_logs"
+	],
+	"cron": {
+		"15 11 * * *": [
+			"biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.fetch_device_logs"
+		]
+	},
+}
 # Testing
 # -------
 
@@ -241,4 +250,3 @@ app_license = "mit"
 # default_log_clearing_doctypes = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
-

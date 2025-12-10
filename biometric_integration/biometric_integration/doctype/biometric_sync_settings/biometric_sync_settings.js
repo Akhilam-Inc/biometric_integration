@@ -1,7 +1,7 @@
 // Copyright (c) 2025, Akhilam Inc. and contributors
 // For license information, please see license.txt
 
-frappe.ui.form.on("Biometric Sync Log", {
+frappe.ui.form.on("Biometric Sync Settings", {
 	refresh(frm) {},
 	sync_logs: function (frm) {
 		frappe.call({
