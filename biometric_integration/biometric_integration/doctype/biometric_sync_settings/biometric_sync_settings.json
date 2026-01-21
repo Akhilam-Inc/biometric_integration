@@ -14,7 +14,10 @@
   "location",
   "endpoint_url",
   "sync_logs",
-  "serial_no"
+  "serial_no",
+  "administrator_section",
+  "missing_date",
+  "sync_logs_for_missing_date"
  ],
  "fields": [
   {
@@ -78,12 +81,27 @@
    "fieldname": "serial_no",
    "fieldtype": "Data",
    "label": "Serial No"
+  },
+  {
+   "fieldname": "administrator_section",
+   "fieldtype": "Section Break",
+   "label": "Administrator"
+  },
+  {
+   "fieldname": "missing_date",
+   "fieldtype": "Datetime",
+   "label": "Missing Date"
+  },
+  {
+   "fieldname": "sync_logs_for_missing_date",
+   "fieldtype": "Button",
+   "label": "Sync Logs For Missing Date"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-09-04 14:04:33.696178",
+ "modified": "2026-01-21 16:13:02.493719",
  "modified_by": "Administrator",
  "module": "Biometric Integration",
  "name": "Biometric Sync Settings",

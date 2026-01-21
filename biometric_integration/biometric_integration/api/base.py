@@ -36,6 +36,7 @@ class BiometricApiClient:
 		self.server_type = self.settings.server_type
 		self.last_sync_datetime = self.settings.last_sync_datetime
 		self.serial_no = self.settings.serial_no
+		self.missing_date = self.settings.missing_date
 
 		self.headers = (
 			{
@@ -164,6 +165,86 @@ class BiometricApiClient:
 				response = requests.post(
 					self.base_url,
 					data=payload,
+					headers={**self.headers, **{"SOAPAction": "http://tempuri.org/GetTransactionsLog"}},
+					timeout=30,
+				)
+
+				if response.status_code == 200:
+					create_biometric_log(
+						message="Device Log Fetched Successfully",
+						response_data=response.text,
+						status="Success",
+					)
+					frappe.flags.request_id = None
+					return {"status": "success", "data": response.text, "type": "eTime Tracker Lite"}
+				else:
+					create_biometric_log(
+						message="Device Log Fetch Error", response_data=response.text, status="Error"
+					)
+					frappe.flags.request_id = None
+					return {"status": "error", "message": f"HTTP {response.status_code}: {response.text}"}
+			except Exception as e:
+				create_biometric_log(message="Device Log Fetch Error", exception=e, status="Error")
+				frappe.flags.request_id = None
+				frappe.log_error(title="Biometric API Error", message=frappe.get_traceback(e))
+				return {"status": "error", "message": str(e)}
+
+	def get_device_logs_for_date(self):
+		from biometric_integration.biometric_integration.api.utils import create_biometric_log
+
+		"""Send SOAP request to get device logs for a given date (YYYY-MM-DD or YYYY/MM/DD)"""
+		server_type = (self.settings.server_type or "").strip()
+		if server_type == "Bio Server":
+			try:
+				log_date = self._format_log_date(self.last_sync_date)
+				body = self._build_soap_request(log_date)
+
+				log = create_biometric_log(
+					method=self.get_device_logs.__name__, request_data=body, make_new=True
+				)
+				frappe.flags.request_id = log.name
+				response = requests.post(
+					self.base_url,
+					data=body,
+					headers={**self.headers, **{"SOAPAction": "http://tempuri.org/GetDeviceLogs"}},
+					timeout=30,
+				)
+
+				if response.status_code == 200:
+					create_biometric_log(
+						message="Device Log Fetched Successfully",
+						response_data=response.text,
+						status="Success",
+					)
+					frappe.flags.request_id = None
+					return {"status": "success", "data": response.text, "type": "Bio Server"}
+				else:
+					create_biometric_log(
+						message="Device Log Fetch Error", response_data=response.text, status="Error"
+					)
+					frappe.flags.request_id = None
+					return {"status": "error", "message": f"HTTP {response.status_code}: {response.text}"}
+			except Exception as e:
+				create_biometric_log(message="Device Log Fetch Error", exception=e, status="Error")
+				frappe.flags.request_id = None
+				frappe.log_error(title="Biometric API Error", message=frappe.get_traceback(e))
+				return {"status": "error", "message": str(e)}
+		else:
+			try:
+				log_date = self._format_for_etime_tracker(self.missing_date)
+				end_date = get_datetime(self.missing_date).replace(hour=23, minute=59, second=59)
+				log_end_date = self._format_for_etime_tracker(end_date)
+				body = self._build_etime_server_envelope(
+					log_date, log_end_date, self.serial_no, self.username, self.password
+				)
+
+				log = create_biometric_log(
+					method=self.get_device_logs.__name__, request_data=body, make_new=True
+				)
+				frappe.flags.request_id = log.name
+				response = requests.post(
+					self.base_url,
+					data=body,
 					headers={**self.headers, **{"SOAPAction": "http://tempuri.org/GetTransactionsLog"}},
 					timeout=30,
 				)
