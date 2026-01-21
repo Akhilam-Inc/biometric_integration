@@ -130,11 +130,15 @@ def fetch_device_logs_background():
 	frappe.enqueue(method=fetch_and_log_device_logs, queue="short", timeout=300, is_async=True)
 	return "Enqueued. Please check Biometric Sync Log for status."
 
+
 @frappe.whitelist()
 def fetch_device_logs_for_missing_date_background():
 	"""Call this from JS to enqueue a background job."""
-	frappe.enqueue(method=fetch_and_log_device_logs_for_missing_date, queue="short", timeout=300, is_async=True)
+	frappe.enqueue(
+		method=fetch_and_log_device_logs_for_missing_date, queue="short", timeout=300, is_async=True
+	)
 	return "Enqueued. Please check Biometric Sync Log for status."
+
 
 def fetch_device_logs():
 	"""Fetch and log biometric data immediately (not in background)."""
@@ -174,6 +178,7 @@ def fetch_and_log_device_logs():
 			sync_settings.last_sync_datetime = frappe.utils.now_datetime()
 			sync_settings.save(ignore_permissions=True)
 
+
 def fetch_and_log_device_logs_for_missing_date():
 	client = BiometricApiClient()
 	logs_data = client.get_device_logs_for_date()
@@ -190,6 +195,7 @@ def fetch_and_log_device_logs_for_missing_date():
 			# sync_settings = frappe.get_single("Biometric Sync Settings")
 			# sync_settings.last_sync_datetime = frappe.utils.now_datetime()
 			# sync_settings.save(ignore_permissions=True)
+
 
 def retry_logs(payload, request_id):
 	client = BiometricApiClient()
