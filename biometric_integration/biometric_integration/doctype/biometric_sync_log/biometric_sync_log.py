@@ -478,6 +478,11 @@ def process_device_logs_etime_day(response_text):
 	skipped_dupe = 0
 	skipped_bad_line = 0
 	employee_errors = 0
+	no_emp = []
+	not_active = []
+	not_ho = []
+	errored_employees = []
+	
 
 	# Group timestamps by emp_code
 	logs_by_emp = {}
@@ -521,6 +526,7 @@ def process_device_logs_etime_day(response_text):
 		employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
 		if not employee:
 			skipped_no_emp += 1
+			no_emp.append(emp_code)
 			frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
 			continue
 		emp_details = (
@@ -531,10 +537,12 @@ def process_device_logs_etime_day(response_text):
 		# Step 2: Manually check status to avoid erpnext.hr.utils.validate
 		if emp_details.status != "Active":
 			employee_errors += 1
+			not_active.append(emp_code)
 			frappe.logger().info(f"Skipping Inactive Employee: {emp_code}")
 			continue
 		if emp_details.office_type != "HO":
 			employee_errors += 1
+			not_ho.append(emp_code)
 			frappe.logger().info(f"Skipping Non-HO Employee: {emp_code}")
 			continue
 		# Insert a checkin for every timestamp (log them as-is)
@@ -557,6 +565,7 @@ def process_device_logs_etime_day(response_text):
 
 			except Exception:
 				employee_errors += 1
+				errored_employees.append(emp_code)
 				frappe.log_error(
 					title="Bio Server: Checkin insert error for employee group",
 					message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
@@ -629,6 +638,11 @@ def process_device_logs_etime(response_text):
 	skipped_bad_line = 0
 	employee_errors = 0
 
+	no_emp = []
+	not_active = []
+	not_ho = []
+	errored_employees = []
+
 	# Group timestamps by emp_code
 	logs_by_emp = {}
 
@@ -674,15 +688,18 @@ def process_device_logs_etime(response_text):
 		)
 		if not employee:
 			skipped_no_emp += 1
+			no_emp.append(emp_code)
 			frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
 			continue
 		# Step 2: Manually check status to avoid erpnext.hr.utils.validate_active_employee throw
 		if emp_details.status != "Active":
 			employee_errors += 1
+			not_active.append(emp_code)
 			frappe.logger().info(f"Skipping Inactive Employee: {emp_code}")
 			continue
 		if emp_details.office_type != "HO":
 			employee_errors += 1
+			not_ho.append(emp_code)
 			frappe.logger().info(f"Skipping Non-HO Employee: {emp_code}")
 			continue
 		last_time = unique_times[-1]
@@ -707,6 +724,7 @@ def process_device_logs_etime(response_text):
 
 			except Exception:
 				employee_errors += 1
+				errored_employees.append(emp_code)
 				frappe.log_error(
 					title="Bio Server: Checkin insert error for employee group",
 					message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
