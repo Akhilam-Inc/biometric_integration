@@ -482,7 +482,6 @@ def process_device_logs_etime_day(response_text):
 	not_active = []
 	not_ho = []
 	errored_employees = []
-	
 
 	# Group timestamps by emp_code
 	logs_by_emp = {}
