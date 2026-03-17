@@ -524,7 +524,16 @@ def process_device_logs_etime_day(response_text):
 			skipped_no_emp += 1
 			frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
 			continue
-
+		emp_details = frappe.db.get_value("Employee", employee, ["name","status", "office_type"], as_dict=True) if employee else None
+		# Step 2: Manually check status to avoid erpnext.hr.utils.validate
+		if emp_details.status != "Active":
+			employee_errors += 1
+			frappe.logger().info(f"Skipping Inactive Employee: {emp_code}")
+			continue
+		if emp_details.office_type != "HO":
+			employee_errors += 1
+			frappe.logger().info(f"Skipping Non-HO Employee: {emp_code}")
+			continue
 		# Insert a checkin for every timestamp (log them as-is)
 		for log_time in unique_times:
 			try:
@@ -655,9 +664,15 @@ def process_device_logs_etime(response_text):
 
 		# Find Employee by attendance_device_id == emp_code
 		employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
+		emp_details = frappe.db.get_value("Employee", employee, ["name","status"], as_dict=True) if employee else None
 		if not employee:
 			skipped_no_emp += 1
 			frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
+			continue
+		# Step 2: Manually check status to avoid erpnext.hr.utils.validate_active_employee throw
+		if emp_details.status != "Active":
+			employee_errors += 1
+			frappe.logger().info(f"Skipping Inactive Employee: {emp_code}")
 			continue
 		last_time = unique_times[-1]
 		# Insert a checkin for every timestamp (log them as-is)
