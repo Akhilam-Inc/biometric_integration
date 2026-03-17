@@ -557,7 +557,10 @@ def process_device_logs_etime_day(response_text):
 					title="Bio Server: Checkin insert error for employee group",
 					message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
 				)
-
+	frappe.log_error(
+		title="Bio Server Sync Summary",
+		message=f"{created} entries created. (skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})",
+	)
 	return (
 		f"{created} entries created. "
 		f"(skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})"
@@ -702,7 +705,10 @@ def process_device_logs_etime(response_text):
 					title="Bio Server: Checkin insert error for employee group",
 					message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
 				)
-
+	frappe.log_error(
+		title="Bio Server Sync Summary",
+		message=f"{created} entries created. (skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})",
+	)
 	return (
 		f"{created} entries created. "
 		f"(skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})"
