@@ -674,6 +674,10 @@ def process_device_logs_etime(response_text):
 			employee_errors += 1
 			frappe.logger().info(f"Skipping Inactive Employee: {emp_code}")
 			continue
+		if emp_details.office_type != "HO":
+			employee_errors += 1
+			frappe.logger().info(f"Skipping Non-HO Employee: {emp_code}")
+			continue
 		last_time = unique_times[-1]
 		# Insert a checkin for every timestamp (log them as-is)
 		for log_time in unique_times:
