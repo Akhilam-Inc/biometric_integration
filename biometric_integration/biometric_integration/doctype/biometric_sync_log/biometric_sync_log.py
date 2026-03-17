@@ -512,7 +512,6 @@ def process_device_logs_etime_day(response_text):
 
 	# Now process each employee group
 	for emp_code, times in logs_by_emp.items():
-		
 		# Normalize unique datetimes and sort
 		unique_times = sorted(set(times))
 		if not unique_times:
@@ -528,7 +527,7 @@ def process_device_logs_etime_day(response_text):
 		# Insert a checkin for every timestamp (log them as-is)
 		for log_time in unique_times:
 			try:
-			# check duplicate existence
+				# check duplicate existence
 				if not frappe.db.exists("Employee Checkin", {"employee": employee, "time": log_time}):
 					frappe.get_doc(
 						{
@@ -647,7 +646,6 @@ def process_device_logs_etime(response_text):
 
 	# Now process each employee group
 	for emp_code, times in logs_by_emp.items():
-		
 		# Normalize unique datetimes and sort
 		unique_times = sorted(set(times))
 		if not unique_times:
