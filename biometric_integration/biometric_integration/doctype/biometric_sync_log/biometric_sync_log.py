@@ -506,22 +506,23 @@ def process_device_logs_etime_day(response_text):
 
 	# Now process each employee group
 	for emp_code, times in logs_by_emp.items():
-		try:
-			# Normalize unique datetimes and sort
-			unique_times = sorted(set(times))
-			if not unique_times:
-				continue
+		
+		# Normalize unique datetimes and sort
+		unique_times = sorted(set(times))
+		if not unique_times:
+			continue
 
-			# Find Employee by attendance_device_id == emp_code
-			employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
-			if not employee:
-				skipped_no_emp += 1
-				frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
-				continue
+		# Find Employee by attendance_device_id == emp_code
+		employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
+		if not employee:
+			skipped_no_emp += 1
+			frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
+			continue
 
-			# Insert a checkin for every timestamp (log them as-is)
-			for log_time in unique_times:
-				# check duplicate existence
+		# Insert a checkin for every timestamp (log them as-is)
+		for log_time in unique_times:
+			try:
+			# check duplicate existence
 				if not frappe.db.exists("Employee Checkin", {"employee": employee, "time": log_time}):
 					frappe.get_doc(
 						{
@@ -536,12 +537,12 @@ def process_device_logs_etime_day(response_text):
 				else:
 					skipped_dupe += 1
 
-		except Exception:
-			employee_errors += 1
-			frappe.log_error(
-				title="Bio Server: Checkin insert error for employee group",
-				message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
-			)
+			except Exception:
+				employee_errors += 1
+				frappe.log_error(
+					title="Bio Server: Checkin insert error for employee group",
+					message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
+				)
 
 	return (
 		f"{created} entries created. "
@@ -640,21 +641,22 @@ def process_device_logs_etime(response_text):
 
 	# Now process each employee group
 	for emp_code, times in logs_by_emp.items():
-		try:
-			# Normalize unique datetimes and sort
-			unique_times = sorted(set(times))
-			if not unique_times:
-				continue
+		
+		# Normalize unique datetimes and sort
+		unique_times = sorted(set(times))
+		if not unique_times:
+			continue
 
-			# Find Employee by attendance_device_id == emp_code
-			employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
-			if not employee:
-				skipped_no_emp += 1
-				frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
-				continue
-			last_time = unique_times[-1]
-			# Insert a checkin for every timestamp (log them as-is)
-			for log_time in unique_times:
+		# Find Employee by attendance_device_id == emp_code
+		employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
+		if not employee:
+			skipped_no_emp += 1
+			frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
+			continue
+		last_time = unique_times[-1]
+		# Insert a checkin for every timestamp (log them as-is)
+		for log_time in unique_times:
+			try:
 				log_type = "OUT" if log_time == last_time else "IN"
 				# check duplicate existence
 				if not frappe.db.exists("Employee Checkin", {"employee": employee, "time": log_time}):
@@ -671,12 +673,12 @@ def process_device_logs_etime(response_text):
 				else:
 					skipped_dupe += 1
 
-		except Exception:
-			employee_errors += 1
-			frappe.log_error(
-				title="Bio Server: Checkin insert error for employee group",
-				message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
-			)
+			except Exception:
+				employee_errors += 1
+				frappe.log_error(
+					title="Bio Server: Checkin insert error for employee group",
+					message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
+				)
 
 	return (
 		f"{created} entries created. "
