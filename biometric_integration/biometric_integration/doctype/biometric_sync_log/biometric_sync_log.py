@@ -523,7 +523,11 @@ def process_device_logs_etime_day(response_text):
 			skipped_no_emp += 1
 			frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
 			continue
-		emp_details = frappe.db.get_value("Employee", employee, ["name","status", "office_type"], as_dict=True) if employee else None
+		emp_details = (
+			frappe.db.get_value("Employee", employee, ["name", "status", "office_type"], as_dict=True)
+			if employee
+			else None
+		)
 		# Step 2: Manually check status to avoid erpnext.hr.utils.validate
 		if emp_details.status != "Active":
 			employee_errors += 1
@@ -557,7 +561,10 @@ def process_device_logs_etime_day(response_text):
 					title="Bio Server: Checkin insert error for employee group",
 					message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
 				)
-
+	frappe.log_error(
+		title="Bio Server Sync Summary",
+		message=f"{created} entries created. (skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})",
+	)
 	return (
 		f"{created} entries created. "
 		f"(skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})"
@@ -662,7 +669,9 @@ def process_device_logs_etime(response_text):
 
 		# Find Employee by attendance_device_id == emp_code
 		employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
-		emp_details = frappe.db.get_value("Employee", employee, ["name","status"], as_dict=True) if employee else None
+		emp_details = (
+			frappe.db.get_value("Employee", employee, ["name", "status"], as_dict=True) if employee else None
+		)
 		if not employee:
 			skipped_no_emp += 1
 			frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
@@ -702,7 +711,10 @@ def process_device_logs_etime(response_text):
 					title="Bio Server: Checkin insert error for employee group",
 					message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
 				)
-
+	frappe.log_error(
+		title="Bio Server Sync Summary",
+		message=f"{created} entries created. (skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})",
+	)
 	return (
 		f"{created} entries created. "
 		f"(skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})"
