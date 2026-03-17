@@ -572,11 +572,11 @@ def process_device_logs_etime_day(response_text):
 				)
 	frappe.log_error(
 		title="Bio Server Sync Summary",
-		message=f"{created} entries created. (skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})",
+		message=f"{created} entries created. (skipped: no-employee={skipped_no_emp} {no_emp} {not_ho}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors} {errored_employees})",
 	)
 	return (
 		f"{created} entries created. "
-		f"(skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})"
+		f"(skipped: no-employee={skipped_no_emp} {no_emp} {not_ho}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors} {errored_employees})"
 	)
 
 
@@ -731,11 +731,11 @@ def process_device_logs_etime(response_text):
 				)
 	frappe.log_error(
 		title="Bio Server Sync Summary",
-		message=f"{created} entries created. (skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})",
+		message=f"{created} entries created. (skipped: no-employee={skipped_no_emp} {no_emp} {not_ho}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors} {errored_employees})",
 	)
 	return (
 		f"{created} entries created. "
-		f"(skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})"
+		f"(skipped: no-employee={skipped_no_emp} {no_emp} {not_ho}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors} {errored_employees})"
 	)
 
 
