@@ -19,7 +19,7 @@ frappe.ui.form.on("Biometric Sync Settings", {
 			},
 		});
 	},
-	sync_logs_for_missing_date : function (frm) {
+	sync_logs_for_missing_date: function (frm) {
 		frappe.call({
 			method: "biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.fetch_device_logs_for_missing_date_background",
 			callback: function (r) {
