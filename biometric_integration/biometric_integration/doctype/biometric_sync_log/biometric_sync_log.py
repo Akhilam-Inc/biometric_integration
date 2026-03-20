@@ -683,7 +683,9 @@ def process_device_logs_etime(response_text):
 		# Find Employee by attendance_device_id == emp_code
 		employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
 		emp_details = (
-			frappe.db.get_value("Employee", employee, ["name", "status", "office_type"], as_dict=True) if employee else None
+			frappe.db.get_value("Employee", employee, ["name", "status", "office_type"], as_dict=True)
+			if employee
+			else None
 		)
 		if not employee:
 			skipped_no_emp += 1
