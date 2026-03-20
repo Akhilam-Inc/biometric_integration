@@ -108,7 +108,7 @@ def _retry_job(job: str):
 	frappe.enqueue(
 		method=retry_logs,
 		queue="short",
-		timeout=300,
+		timeout=3500,
 		is_async=True,
 		payload=doc.request_data,
 		request_id=doc.name,
@@ -127,7 +127,7 @@ def bulk_retry(names):
 @frappe.whitelist()
 def fetch_device_logs_background():
 	"""Call this from JS to enqueue a background job."""
-	frappe.enqueue(method=fetch_and_log_device_logs, queue="short", timeout=300, is_async=True)
+	frappe.enqueue(method=fetch_and_log_device_logs, queue="short", timeout=3500, is_async=True)
 	return "Enqueued. Please check Biometric Sync Log for status."
 
 
@@ -135,7 +135,7 @@ def fetch_device_logs_background():
 def fetch_device_logs_for_missing_date_background():
 	"""Call this from JS to enqueue a background job."""
 	frappe.enqueue(
-		method=fetch_and_log_device_logs_for_missing_date, queue="short", timeout=300, is_async=True
+		method=fetch_and_log_device_logs_for_missing_date, queue="short", timeout=3500, is_async=True
 	)
 	return "Enqueued. Please check Biometric Sync Log for status."
 
@@ -683,7 +683,9 @@ def process_device_logs_etime(response_text):
 		# Find Employee by attendance_device_id == emp_code
 		employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
 		emp_details = (
-			frappe.db.get_value("Employee", employee, ["name", "status", "office_type"], as_dict=True) if employee else None
+			frappe.db.get_value("Employee", employee, ["name", "status", "office_type"], as_dict=True)
+			if employee
+			else None
 		)
 		if not employee:
 			skipped_no_emp += 1
@@ -728,6 +730,7 @@ def process_device_logs_etime(response_text):
 					title="Bio Server: Checkin insert error for employee group",
 					message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
 				)
+				continue
 	frappe.log_error(
 		title="Bio Server Sync Summary",
 		message=f"{created} entries created. (skipped: no-employee={skipped_no_emp} {no_emp} {not_ho}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors} {errored_employees})",
