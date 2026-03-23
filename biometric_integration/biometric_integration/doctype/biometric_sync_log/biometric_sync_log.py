@@ -108,7 +108,7 @@ def _retry_job(job: str):
 	frappe.enqueue(
 		method=retry_logs,
 		queue="short",
-		timeout=300,
+		timeout=3500,
 		is_async=True,
 		payload=doc.request_data,
 		request_id=doc.name,
@@ -127,7 +127,16 @@ def bulk_retry(names):
 @frappe.whitelist()
 def fetch_device_logs_background():
 	"""Call this from JS to enqueue a background job."""
-	frappe.enqueue(method=fetch_and_log_device_logs, queue="short", timeout=300, is_async=True)
+	frappe.enqueue(method=fetch_and_log_device_logs, queue="short", timeout=3500, is_async=True)
+	return "Enqueued. Please check Biometric Sync Log for status."
+
+
+@frappe.whitelist()
+def fetch_device_logs_for_missing_date_background():
+	"""Call this from JS to enqueue a background job."""
+	frappe.enqueue(
+		method=fetch_and_log_device_logs_for_missing_date, queue="short", timeout=3500, is_async=True
+	)
 	return "Enqueued. Please check Biometric Sync Log for status."
 
 
@@ -168,6 +177,24 @@ def fetch_and_log_device_logs():
 			sync_settings = frappe.get_single("Biometric Sync Settings")
 			sync_settings.last_sync_datetime = frappe.utils.now_datetime()
 			sync_settings.save(ignore_permissions=True)
+
+
+def fetch_and_log_device_logs_for_missing_date():
+	client = BiometricApiClient()
+	logs_data = client.get_device_logs_for_date()
+	if logs_data["status"] == "success":
+		if logs_data["type"] == "Bio Server":
+			process_device_logs(logs_data["data"])
+			sync_settings = frappe.get_single("Biometric Sync Settings")
+			current_sync_date = frappe.utils.getdate(sync_settings.last_sync_date)
+			next_sync_date = frappe.utils.add_days(current_sync_date, 1)
+			sync_settings.last_sync_date = next_sync_date
+			sync_settings.save(ignore_permissions=True)
+		if logs_data["type"] == "eTime Tracker Lite":
+			process_device_logs_etime(logs_data["data"])
+			# sync_settings = frappe.get_single("Biometric Sync Settings")
+			# sync_settings.last_sync_datetime = frappe.utils.now_datetime()
+			# sync_settings.save(ignore_permissions=True)
 
 
 def retry_logs(payload, request_id):
@@ -451,6 +478,10 @@ def process_device_logs_etime_day(response_text):
 	skipped_dupe = 0
 	skipped_bad_line = 0
 	employee_errors = 0
+	no_emp = []
+	not_active = []
+	not_ho = []
+	errored_employees = []
 
 	# Group timestamps by emp_code
 	logs_by_emp = {}
@@ -495,36 +526,83 @@ def process_device_logs_etime_day(response_text):
 			employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
 			if not employee:
 				skipped_no_emp += 1
+				no_emp.append(emp_code)
 				frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
 				continue
 
-			# Insert a checkin for every timestamp (log them as-is)
-			for log_time in unique_times:
-				# check duplicate existence
-				if not frappe.db.exists("Employee Checkin", {"employee": employee, "time": log_time}):
-					frappe.get_doc(
-						{
-							"doctype": "Employee Checkin",
-							"employee": employee,
-							"time": log_time,
-							"device_id": serial_number,
-							"log_type": "IN",  # kept as IN for all entries; change if needed
-						}
-					).insert(ignore_permissions=True)
-					created += 1
-				else:
-					skipped_dupe += 1
-
-		except Exception:
-			employee_errors += 1
-			frappe.log_error(
-				title="Bio Server: Checkin insert error for employee group",
-				message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
+			emp_details = frappe.db.get_value(
+				"Employee", employee, ["name", "status", "office_type"], as_dict=True
 			)
 
+			# Manually check status to avoid erpnext.hr.utils.validate_active_employee throw
+			if emp_details.status != "Active":
+				employee_errors += 1
+				not_active.append(emp_code)
+				frappe.logger().info(f"Skipping Inactive Employee: {emp_code}")
+				continue
+
+			if emp_details.office_type != "HO":
+				employee_errors += 1
+				not_ho.append(
+					f"{emp_code}: {emp_details.name} ({emp_details.status}) {emp_details.office_type}"
+				)
+				frappe.logger().info(f"Skipping Non-HO Employee: {emp_code}")
+				continue
+
+			# Insert a checkin for every timestamp (all as IN for etime_day)
+			for log_time in unique_times:
+				try:
+					if not frappe.db.exists("Employee Checkin", {"employee": employee, "time": log_time}):
+						frappe.get_doc(
+							{
+								"doctype": "Employee Checkin",
+								"employee": employee,
+								"time": log_time,
+								"device_id": serial_number,
+								"log_type": "IN",
+							}
+						).insert(ignore_permissions=True)
+						created += 1
+					else:
+						skipped_dupe += 1
+
+				except Exception:
+					employee_errors += 1
+					errored_employees.append(emp_code)
+					frappe.log_error(
+						title="Bio Server: Checkin insert error for employee group",
+						message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
+					)
+					frappe.db.rollback()  # ← Clean broken transaction so next log_time can proceed
+					# continue to next log_time for this employee
+
+			# Commit after each employee so locks are released
+			# and other employees are not affected if something goes wrong
+			frappe.db.commit()
+
+		except Exception:
+			frappe.db.rollback()  # ← Clean up if something fails outside the inner loop
+			employee_errors += 1
+			errored_employees.append(emp_code)
+			frappe.log_error(
+				title="Bio Server: Employee group processing error",
+				message=f"Emp Code: {emp_code}\n{frappe.get_traceback()}",
+			)
+			# continue to next employee
+
+	frappe.log_error(
+		title="Bio Server Sync Summary",
+		message=(
+			f"{created} entries created. "
+			f"(skipped: no-employee={skipped_no_emp} {no_emp} {not_ho}, "
+			f"duplicates={skipped_dupe}, bad-line={skipped_bad_line}, "
+			f"emp-errors={employee_errors} {errored_employees})"
+		),
+	)
 	return (
 		f"{created} entries created. "
-		f"(skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})"
+		f"(skipped: no-employee={skipped_no_emp} {no_emp} {not_ho}, duplicates={skipped_dupe}, "
+		f"bad-line={skipped_bad_line}, emp-errors={employee_errors} {errored_employees})"
 	)
 
 
@@ -586,6 +664,11 @@ def process_device_logs_etime(response_text):
 	skipped_bad_line = 0
 	employee_errors = 0
 
+	no_emp = []
+	not_active = []
+	not_ho = []
+	errored_employees = []
+
 	# Group timestamps by emp_code
 	logs_by_emp = {}
 
@@ -619,21 +702,38 @@ def process_device_logs_etime(response_text):
 
 	# Now process each employee group
 	for emp_code, times in logs_by_emp.items():
-		try:
-			# Normalize unique datetimes and sort
-			unique_times = sorted(set(times))
-			if not unique_times:
-				continue
+		# Normalize unique datetimes and sort
+		unique_times = sorted(set(times))
+		if not unique_times:
+			continue
 
-			# Find Employee by attendance_device_id == emp_code
-			employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
-			if not employee:
-				skipped_no_emp += 1
-				frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
-				continue
-			last_time = unique_times[-1]
-			# Insert a checkin for every timestamp (log them as-is)
-			for log_time in unique_times:
+		# Find Employee by attendance_device_id == emp_code
+		employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
+		emp_details = (
+			frappe.db.get_value("Employee", employee, ["name", "status", "office_type"], as_dict=True)
+			if employee
+			else None
+		)
+		if not employee:
+			skipped_no_emp += 1
+			no_emp.append(emp_code)
+			frappe.logger().info(f"[Bio Server] No employee for code: {emp_code}")
+			continue
+		# Step 2: Manually check status to avoid erpnext.hr.utils.validate_active_employee throw
+		if emp_details.status != "Active":
+			employee_errors += 1
+			not_active.append(emp_code)
+			frappe.logger().info(f"Skipping Inactive Employee: {emp_code}")
+			continue
+		if emp_details.office_type != "HO":
+			employee_errors += 1
+			not_ho.append(f"{emp_code}: {emp_details.name} ({emp_details.status}) {emp_details.office_type}")
+			frappe.logger().info(f"Skipping Non-HO Employee: {emp_code}")
+			continue
+		last_time = unique_times[-1]
+		# Insert a checkin for every timestamp (log them as-is)
+		for log_time in unique_times:
+			try:
 				log_type = "OUT" if log_time == last_time else "IN"
 				# check duplicate existence
 				if not frappe.db.exists("Employee Checkin", {"employee": employee, "time": log_time}):
@@ -650,16 +750,21 @@ def process_device_logs_etime(response_text):
 				else:
 					skipped_dupe += 1
 
-		except Exception:
-			employee_errors += 1
-			frappe.log_error(
-				title="Bio Server: Checkin insert error for employee group",
-				message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
-			)
-
+			except Exception:
+				employee_errors += 1
+				errored_employees.append(emp_code)
+				frappe.log_error(
+					title="Bio Server: Checkin insert error for employee group",
+					message=f"Emp Code: {emp_code}\nLines: {len(times)}\n{frappe.get_traceback()}",
+				)
+				continue
+	frappe.log_error(
+		title="Bio Server Sync Summary",
+		message=f"{created} entries created. (skipped: no-employee={skipped_no_emp} {no_emp} {not_ho}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors} {errored_employees})",
+	)
 	return (
 		f"{created} entries created. "
-		f"(skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors})"
+		f"(skipped: no-employee={skipped_no_emp} {no_emp} {not_ho}, duplicates={skipped_dupe}, bad-line={skipped_bad_line}, emp-errors={employee_errors} {errored_employees})"
 	)
 
 
