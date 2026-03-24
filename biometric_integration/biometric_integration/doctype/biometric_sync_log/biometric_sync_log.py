@@ -543,7 +543,9 @@ def process_device_logs_etime_day(response_text):
 
 			if emp_details.office_type != "HO":
 				employee_errors += 1
-				not_ho.append(f"{emp_code}: {emp_details.name} ({emp_details.status}) {emp_details.office_type}")
+				not_ho.append(
+					f"{emp_code}: {emp_details.name} ({emp_details.status}) {emp_details.office_type}"
+				)
 				frappe.logger().info(f"Skipping Non-HO Employee: {emp_code}")
 				continue
 
@@ -602,6 +604,7 @@ def process_device_logs_etime_day(response_text):
 		f"(skipped: no-employee={skipped_no_emp} {no_emp} {not_ho}, duplicates={skipped_dupe}, "
 		f"bad-line={skipped_bad_line}, emp-errors={employee_errors} {errored_employees})"
 	)
+
 
 def process_device_logs_etime(response_text):
 	"""
