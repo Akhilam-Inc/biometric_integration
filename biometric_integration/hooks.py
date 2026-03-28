@@ -169,11 +169,11 @@ scheduler_events = {
 	"daily_long": [
 		"biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.fetch_and_log_device_logs"
 	],
-	"cron": {
-		"15 11 * * *": [
-			"biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.fetch_device_logs"
-		]
-	},
+	# "cron": {
+	# 	"15 11 * * *": [
+	# 		"biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.fetch_device_logs"
+	# 	]
+	# },
 }
 # Testing
 # -------

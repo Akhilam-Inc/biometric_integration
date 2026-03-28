@@ -1,3 +1,4 @@
+import json
 import textwrap
 from datetime import date, datetime, time
 from enum import Enum
@@ -23,37 +24,36 @@ class BiometricApiClient:
 
 	def __init__(self):
 		self.settings = frappe.get_single("Biometric Sync Settings")  # Define this DocType
-		self.base_url = (
-			(self.settings.endpoint_url.rstrip("/") + WEB_URI_BIO_SERVER)
-			if self.settings.server_type == "Bio Server"
-			else (self.settings.endpoint_url.rstrip("/") + WEB_URI_ETRACKER_LITE)
-		)
+		self.server_type = self.settings.server_type
 		self.username = self.settings.api_user
 		self.password = self.settings.get_password("api_password")
 		self.location = self.settings.location
 		self.last_sync_date = self.settings.last_sync_date
-		# For eTime Tracker Lite
-		self.server_type = self.settings.server_type
 		self.last_sync_datetime = self.settings.last_sync_datetime
 		self.serial_no = self.settings.serial_no
 		self.missing_date = self.settings.missing_date
+		# For ZKTeco
+		self.zkteco_token = self.settings.zkteco_token
+		self.zkteco_last_sync_datetime = self.settings.zkteco_last_sync_datetime
 
-		self.headers = (
-			{
-				"Content-Type": "text/xml; charset=utf-8",
-			}
-			if self.settings.server_type == "Bio Server"
-			else {
-				"Content-Type": "application/soap+xml",
-			}
-		)
+		if self.server_type == "Bio Server":
+			self.base_url = self.settings.endpoint_url.rstrip("/") + WEB_URI_BIO_SERVER
+			self.headers = {"Content-Type": "text/xml; charset=utf-8"}
+		elif self.server_type == "eTime Tracker Lite":
+			self.base_url = self.settings.endpoint_url.rstrip("/") + WEB_URI_ETRACKER_LITE
+			self.headers = {"Content-Type": "application/soap+xml"}
+		else:
+			self.base_url = self.settings.endpoint_url.rstrip("/")
+			self.headers = {"Content-Type": "application/json"}
 
 	def get_device_logs(self):
 		from biometric_integration.biometric_integration.api.utils import create_biometric_log
 
-		"""Send SOAP request to get device logs for a given date (YYYY-MM-DD or YYYY/MM/DD)"""
+		"""Send SOAP/REST request to get device logs"""
 		server_type = (self.settings.server_type or "").strip()
-		if server_type == "Bio Server":
+		if server_type == "ZKTeco":
+			return self.get_device_logs_zkteco()
+		elif server_type == "Bio Server":
 			try:
 				log_date = self._format_log_date(self.last_sync_date)
 				body = self._build_soap_request(log_date)
@@ -88,7 +88,7 @@ class BiometricApiClient:
 				frappe.flags.request_id = None
 				frappe.log_error(title="Biometric API Error", message=frappe.get_traceback(e))
 				return {"status": "error", "message": str(e)}
-		else:
+		elif server_type == "eTime Tracker Lite":
 			try:
 				log_date = self._format_for_etime_tracker(self.last_sync_datetime)
 				body = self._build_etime_server_envelope(
@@ -192,9 +192,11 @@ class BiometricApiClient:
 	def get_device_logs_for_date(self):
 		from biometric_integration.biometric_integration.api.utils import create_biometric_log
 
-		"""Send SOAP request to get device logs for a given date (YYYY-MM-DD or YYYY/MM/DD)"""
+		"""Send SOAP/REST request to get device logs for a specific date"""
 		server_type = (self.settings.server_type or "").strip()
-		if server_type == "Bio Server":
+		if server_type == "ZKTeco":
+			return self.get_device_logs_zkteco(missing_date=self.missing_date)
+		elif server_type == "Bio Server":
 			try:
 				log_date = self._format_log_date(self.last_sync_date)
 				body = self._build_soap_request(log_date)
@@ -229,7 +231,7 @@ class BiometricApiClient:
 				frappe.flags.request_id = None
 				frappe.log_error(title="Biometric API Error", message=frappe.get_traceback(e))
 				return {"status": "error", "message": str(e)}
-		else:
+		elif server_type == "eTime Tracker Lite":
 			try:
 				log_date = self._format_for_etime_tracker(self.missing_date)
 				end_date = get_datetime(self.missing_date).replace(hour=23, minute=59, second=59)
@@ -368,3 +370,85 @@ class BiometricApiClient:
 		xml = xml_decl + body  # ensures <?xml?> is the very first bytes
 		xml = xml.replace("\ufeff", "")  # strip BOM if somehow present in string
 		return xml
+
+	def _format_for_zkteco(self, dt) -> str:
+		"""Format datetime as YYYY-MM-DD HH:MM:SS for ZKTeco API params"""
+		dt = self._coerce_to_datetime(dt)
+		return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+	def get_device_logs_zkteco(self, missing_date=None):
+		"""Fetch all ZKTeco transactions via REST API with pagination."""
+		from biometric_integration.biometric_integration.api.utils import create_biometric_log
+
+		try:
+			if missing_date:
+				start_dt = self._coerce_to_datetime(missing_date).replace(hour=0, minute=0, second=0)
+				end_dt = start_dt.replace(hour=23, minute=59, second=59)
+			else:
+				start_dt = self._coerce_to_datetime(self.zkteco_last_sync_datetime)
+				end_dt = self._coerce_to_datetime(frappe.utils.now_datetime())
+
+			start_time = self._format_for_zkteco(start_dt)
+			end_time = self._format_for_zkteco(end_dt)
+
+			transactions_url = self.settings.endpoint_url.rstrip("/") + "/iclock/api/transactions/"
+			auth_headers = {
+				"Authorization": f"JWT {self.zkteco_token}",
+				"Content-Type": "application/json",
+			}
+
+			log = create_biometric_log(
+				method=self.get_device_logs_zkteco.__name__,
+				request_data=json.dumps({"start_time": start_time, "end_time": end_time}),
+				make_new=True,
+			)
+			frappe.flags.request_id = log.name
+
+			all_records = []
+			page = 1
+
+			while True:
+				params = {
+					"start_time": start_time,
+					"end_time": end_time,
+					"page": page,
+					"page_size": 100,
+				}
+				response = requests.get(
+					transactions_url,
+					params=params,
+					headers=auth_headers,
+					timeout=30,
+				)
+
+				if response.status_code != 200:
+					create_biometric_log(
+						message=f"ZKTeco Log Fetch Error on page {page}",
+						response_data=response.text,
+						status="Error",
+					)
+					frappe.flags.request_id = None
+					return {"status": "error", "message": f"HTTP {response.status_code}: {response.text}"}
+
+				data = response.json()
+				records = data.get("data", [])
+				all_records.extend(records)
+
+				if not data.get("next"):
+					break
+
+				page += 1
+
+			create_biometric_log(
+				message=f"ZKTeco logs fetched successfully ({len(all_records)} records across {page} page(s))",
+				response_data=json.dumps({"total_records": len(all_records), "pages_fetched": page}),
+				status="Success",
+			)
+			frappe.flags.request_id = None
+			return {"status": "success", "data": all_records, "type": "ZKTeco"}
+
+		except Exception as e:
+			create_biometric_log(message="ZKTeco Log Fetch Error", exception=e, status="Error")
+			frappe.flags.request_id = None
+			frappe.log_error(title="ZKTeco API Error", message=frappe.get_traceback(e))
+			return {"status": "error", "message": str(e)}

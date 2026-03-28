@@ -10,6 +10,8 @@
   "api_password",
   "last_sync_date",
   "last_sync_datetime",
+  "zkteco_last_sync_datetime",
+  "zkteco_token",
   "column_break_bvjr",
   "location",
   "endpoint_url",
@@ -67,7 +69,7 @@
    "fieldname": "server_type",
    "fieldtype": "Select",
    "label": "Server Type",
-   "options": "Bio Server\neTime Tracker Lite",
+   "options": "Bio Server\neTime Tracker Lite\nZKTeco",
    "reqd": 1
   },
   {
@@ -81,6 +83,19 @@
    "fieldname": "serial_no",
    "fieldtype": "Data",
    "label": "Serial No"
+  },
+  {
+   "depends_on": "eval:doc.server_type == \"ZKTeco\";",
+   "fieldname": "zkteco_last_sync_datetime",
+   "fieldtype": "Datetime",
+   "label": "ZKTeco Last Sync Datetime"
+  },
+  {
+   "depends_on": "eval:doc.server_type == \"ZKTeco\";",
+   "fieldname": "zkteco_token",
+   "fieldtype": "Small Text",
+   "label": "ZKTeco Token",
+   "read_only": 1
   },
   {
    "fieldname": "administrator_section",

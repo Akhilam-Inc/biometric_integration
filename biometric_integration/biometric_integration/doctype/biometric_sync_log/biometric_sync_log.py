@@ -157,6 +157,13 @@ def fetch_device_logs():
 			sync_settings = frappe.get_single("Biometric Sync Settings")
 			sync_settings.last_sync_datetime = frappe.utils.now_datetime()
 			sync_settings.save(ignore_permissions=True)
+		if logs_data["type"] == "ZKTeco":
+			process_device_logs_zkteco(logs_data["data"])
+			sync_settings = frappe.get_single("Biometric Sync Settings")
+			sync_settings.zkteco_last_sync_datetime = frappe.utils.now_datetime()
+			frappe.flags.skip_zkteco_token_refresh = True
+			sync_settings.save(ignore_permissions=True)
+			frappe.flags.skip_zkteco_token_refresh = False
 	return "Completed. Please check Biometric Sync Log for status."
 
 
@@ -177,6 +184,13 @@ def fetch_and_log_device_logs():
 			sync_settings = frappe.get_single("Biometric Sync Settings")
 			sync_settings.last_sync_datetime = frappe.utils.now_datetime()
 			sync_settings.save(ignore_permissions=True)
+		if logs_data["type"] == "ZKTeco":
+			process_device_logs_zkteco(logs_data["data"])
+			sync_settings = frappe.get_single("Biometric Sync Settings")
+			sync_settings.zkteco_last_sync_datetime = frappe.utils.now_datetime()
+			frappe.flags.skip_zkteco_token_refresh = True
+			sync_settings.save(ignore_permissions=True)
+			frappe.flags.skip_zkteco_token_refresh = False
 
 
 def fetch_and_log_device_logs_for_missing_date():
@@ -195,6 +209,8 @@ def fetch_and_log_device_logs_for_missing_date():
 			# sync_settings = frappe.get_single("Biometric Sync Settings")
 			# sync_settings.last_sync_datetime = frappe.utils.now_datetime()
 			# sync_settings.save(ignore_permissions=True)
+		if logs_data["type"] == "ZKTeco":
+			process_device_logs_zkteco(logs_data["data"])
 
 
 def retry_logs(payload, request_id):
@@ -804,6 +820,76 @@ def process_device_logs_etime(response_text):
 		f"{created} entries created. "
 		f"(skipped: no-employee={skipped_no_emp} {no_emp} {not_ho}, duplicates={skipped_dupe}, "
 		f"bad-line={skipped_bad_line}, emp-errors={employee_errors} {errored_employees})"
+	)
+
+
+def process_device_logs_zkteco(records):
+	"""
+	Processes ZKTeco REST API transaction records.
+
+	Creates an Employee Checkin for each record using emp_code and punch_time.
+	No log_type is set (ZKTeco does not distinguish IN/OUT).
+	"""
+	created = 0
+	skipped_no_emp = 0
+	skipped_dupe = 0
+	errors = 0
+	no_emp = []
+	errored_records = []
+
+	for record in records:
+		try:
+			emp_code = record.get("emp_code")
+			punch_time_str = record.get("punch_time")
+
+			if not emp_code or not punch_time_str:
+				errors += 1
+				continue
+
+			log_time = get_datetime(punch_time_str)
+
+			employee = frappe.db.get_value("Employee", {"attendance_device_id": emp_code})
+			if not employee:
+				skipped_no_emp += 1
+				if emp_code not in no_emp:
+					no_emp.append(emp_code)
+				continue
+
+			if frappe.db.exists("Employee Checkin", {"employee": employee, "time": log_time}):
+				skipped_dupe += 1
+				continue
+
+			frappe.get_doc(
+				{
+					"doctype": "Employee Checkin",
+					"employee": employee,
+					"time": log_time,
+					"device_id": record.get("terminal_alias") or "ZKTeco",
+				}
+			).insert(ignore_permissions=True)
+			created += 1
+
+		except Exception:
+			errors += 1
+			errored_records.append(record.get("emp_code"))
+			frappe.log_error(
+				title="ZKTeco: Checkin insert error",
+				message=f"Record: {record}\n{frappe.get_traceback()}",
+			)
+
+	frappe.db.commit()
+
+	frappe.log_error(
+		title="ZKTeco Sync Summary",
+		message=(
+			f"{created} created. "
+			f"(skipped: no-employee={skipped_no_emp} {no_emp}, "
+			f"duplicates={skipped_dupe}, errors={errors} {errored_records})"
+		),
+	)
+	return (
+		f"{created} Employee Checkin(s) created. "
+		f"(skipped: no-employee={skipped_no_emp}, duplicates={skipped_dupe}, errors={errors})"
 	)
 
 
