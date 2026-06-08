@@ -15,6 +15,7 @@
   "endpoint_url",
   "sync_logs",
   "serial_no",
+  "biometric_location_detail",
   "administrator_section",
   "missing_date",
   "sync_logs_for_missing_date"
@@ -48,18 +49,21 @@
   {
    "fieldname": "sync_logs",
    "fieldtype": "Button",
+   "hidden": 1,
    "label": "Sync Logs"
   },
   {
    "depends_on": "eval:doc.server_type == \"Bio Server\";",
    "fieldname": "last_sync_date",
    "fieldtype": "Date",
+   "hidden": 1,
    "label": "Last Sync Date"
   },
   {
    "depends_on": "eval:doc.server_type == \"Bio Server\";",
    "fieldname": "location",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Location"
   },
   {
@@ -83,6 +87,7 @@
    "label": "Serial No"
   },
   {
+   "depends_on": "eval:doc.server_type == \"eTime Tracker Lite\"",
    "fieldname": "administrator_section",
    "fieldtype": "Section Break",
    "label": "Administrator"
@@ -96,12 +101,19 @@
    "fieldname": "sync_logs_for_missing_date",
    "fieldtype": "Button",
    "label": "Sync Logs For Missing Date"
+  },
+  {
+   "depends_on": "eval:doc.server_type == \"Bio Server\"",
+   "fieldname": "biometric_location_detail",
+   "fieldtype": "Table",
+   "label": "Biometric Location Detail",
+   "options": "Biometric Location Detail"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-01-21 16:13:02.493719",
+ "modified": "2026-06-05 10:13:52.283571",
  "modified_by": "Administrator",
  "module": "Biometric Integration",
  "name": "Biometric Sync Settings",
@@ -118,6 +130,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": []

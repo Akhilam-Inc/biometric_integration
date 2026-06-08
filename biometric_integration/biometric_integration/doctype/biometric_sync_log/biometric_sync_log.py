@@ -9,7 +9,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder import Interval
 from frappe.query_builder.functions import Now
-from frappe.utils import get_datetime, strip_html
+from frappe.utils import get_datetime,getdate, strip_html,today
 from frappe.utils.data import cstr
 
 from biometric_integration.biometric_integration.api.base import BiometricApiClient
@@ -125,33 +125,57 @@ def bulk_retry(names):
 
 
 @frappe.whitelist()
-def fetch_device_logs_background():
+def fetch_device_logs_background(location = None, last_sync_date = None):
 	"""Call this from JS to enqueue a background job."""
-	frappe.enqueue(method=fetch_and_log_device_logs, queue="short", timeout=3500, is_async=True)
+	if not location:
+		frappe.throw(
+			msg="Please select a Location before proceeding.",
+			title="Location Required"
+		)
+
+	if not last_sync_date:
+		frappe.throw(
+			msg=f"Please set the Last Sync Date for location <b>{location}</b> before proceeding.",
+			title="Last Sync Date Required"
+		)
+
+	frappe.enqueue(method=fetch_and_log_device_logs, location = location, last_sync_date = last_sync_date, queue="short", timeout=3500, is_async=True)
 	return "Enqueued. Please check Biometric Sync Log for status."
 
 
 @frappe.whitelist()
-def fetch_device_logs_for_missing_date_background():
+def fetch_device_logs_for_missing_date_background(location = None, missing_date = None):
 	"""Call this from JS to enqueue a background job."""
+	if not location:
+		frappe.throw(
+			msg="Please select a Location before proceeding.",
+			title="Location Required"
+		)
+
+	if not missing_date:
+		frappe.throw(
+			msg=f"Please provide the Missing Date for location <b>{location}</b> before proceeding.",
+			title="Missing Date Required"
+		)
+		
 	frappe.enqueue(
-		method=fetch_and_log_device_logs_for_missing_date, queue="short", timeout=3500, is_async=True
+		method=fetch_and_log_device_logs_for_missing_date,location = location, missing_date = missing_date, queue="short", timeout=3500, is_async=True
 	)
 	return "Enqueued. Please check Biometric Sync Log for status."
 
 
-def fetch_device_logs():
+def fetch_device_logs(location = None, last_sync_date = None):
 	"""Fetch and log biometric data immediately (not in background)."""
 	client = BiometricApiClient()
-	logs_data = client.get_device_logs()
+	logs_data = client.get_device_logs(location, last_sync_date)
 	if logs_data["status"] == "success":
 		if logs_data["type"] == "Bio Server":
-			process_device_logs(logs_data["data"])
-			sync_settings = frappe.get_single("Biometric Sync Settings")
-			current_sync_date = frappe.utils.getdate(sync_settings.last_sync_date)
+			# process_device_logs(logs_data["data"])
+			current_sync_date = frappe.utils.getdate(last_sync_date)
 			next_sync_date = frappe.utils.add_days(current_sync_date, 1)
-			sync_settings.last_sync_date = next_sync_date
-			sync_settings.save(ignore_permissions=True)
+			if next_sync_date <= getdate(today()):
+				update_biometric_sync_settings(location, next_sync_date)
+
 		if logs_data["type"] == "eTime Tracker Lite":
 			process_device_logs_etime_day(logs_data["data"])
 			sync_settings = frappe.get_single("Biometric Sync Settings")
@@ -160,18 +184,19 @@ def fetch_device_logs():
 	return "Completed. Please check Biometric Sync Log for status."
 
 
-def fetch_and_log_device_logs():
+def fetch_and_log_device_logs(location = None, last_sync_date = None):
 	"""Actual background job that fetches and logs biometric data."""
 	client = BiometricApiClient()
-	logs_data = client.get_device_logs()
+	logs_data = client.get_device_logs(location, last_sync_date)
+
 	if logs_data["status"] == "success":
 		if logs_data["type"] == "Bio Server":
-			process_device_logs(logs_data["data"])
-			sync_settings = frappe.get_single("Biometric Sync Settings")
-			current_sync_date = frappe.utils.getdate(sync_settings.last_sync_date)
+			# process_device_logs(logs_data["data"])
+			current_sync_date = frappe.utils.getdate(last_sync_date)
 			next_sync_date = frappe.utils.add_days(current_sync_date, 1)
-			sync_settings.last_sync_date = next_sync_date
-			sync_settings.save(ignore_permissions=True)
+			if next_sync_date <= getdate(today()):
+				update_biometric_sync_settings(location, next_sync_date)
+
 		if logs_data["type"] == "eTime Tracker Lite":
 			process_device_logs_etime(logs_data["data"])
 			sync_settings = frappe.get_single("Biometric Sync Settings")
@@ -179,17 +204,14 @@ def fetch_and_log_device_logs():
 			sync_settings.save(ignore_permissions=True)
 
 
-def fetch_and_log_device_logs_for_missing_date():
+def fetch_and_log_device_logs_for_missing_date(location = None, missing_date = None):
 	client = BiometricApiClient()
-	logs_data = client.get_device_logs_for_date()
+	logs_data = client.get_device_logs_for_date(location, missing_date)
 	if logs_data["status"] == "success":
 		if logs_data["type"] == "Bio Server":
-			process_device_logs(logs_data["data"])
-			sync_settings = frappe.get_single("Biometric Sync Settings")
-			current_sync_date = frappe.utils.getdate(sync_settings.last_sync_date)
-			next_sync_date = frappe.utils.add_days(current_sync_date, 1)
-			sync_settings.last_sync_date = next_sync_date
-			sync_settings.save(ignore_permissions=True)
+			pass
+			# process_device_logs(logs_data["data"])
+
 		if logs_data["type"] == "eTime Tracker Lite":
 			process_device_logs_etime(logs_data["data"])
 			# sync_settings = frappe.get_single("Biometric Sync Settings")
@@ -202,10 +224,10 @@ def retry_logs(payload, request_id):
 	logs_data = client.retry_get_device_logs(payload, request_id)
 	if logs_data["status"] == "success":
 		if logs_data["type"] == "Bio Server":
-			process_device_logs(logs_data["data"])
+			pass
+		# process_device_logs(logs_data["data"])
 		if logs_data["type"] == "eTime Tracker Lite":
 			process_device_logs_etime(logs_data["data"])
-
 
 def process_device_logs(response_text):
 	ns = {"soap": "http://schemas.xmlsoap.org/soap/envelope/", "ns1": "http://tempuri.org/"}
@@ -871,3 +893,36 @@ def attendance_log():
 		frappe.log_error(frappe.get_traceback(), "Webhook Handler Error")
 		frappe.local.response.http_status_code = 500
 		return {"status": "error", "message": str(e)}
+
+def all_locations_fetch_and_log_device_logs():
+	biometric_settings = frappe.get_single('Biometric Sync Settings')
+
+	# get all the row with loation and last_sync_date
+	biometric_location_detail = biometric_settings.biometric_location_detail
+
+	for row in biometric_location_detail:
+		if not row.location or not row.last_sync_date:
+			continue
+		fetch_device_logs_background(row.location, str(row.last_sync_date))
+
+def update_biometric_sync_settings(location, next_sync_date):
+	row = frappe.db.get_value(
+		"Biometric Location Detail",
+		{"parent": "Biometric Sync Settings", "location": location},
+		"name",
+	)
+	if row:
+		frappe.db.set_value(
+			"Biometric Location Detail",
+			row,
+			"last_sync_date",
+			next_sync_date,
+			update_modified=False,
+		)
+		frappe.publish_realtime(
+			"biometric_sync_update",
+			{"location": location, "status": "success"}
+		)	
+ 
+def test():
+	pass 

@@ -167,7 +167,7 @@ app_license = "mit"
 # }
 scheduler_events = {
 	"daily_long": [
-		"biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.fetch_and_log_device_logs"
+		"biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.all_locations_fetch_and_log_device_logs"
 	],
 	"cron": {
 		"15 11 * * *": [

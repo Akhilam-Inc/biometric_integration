@@ -5,6 +5,7 @@ from enum import Enum
 import frappe
 import requests
 from frappe.utils import get_datetime
+from types import SimpleNamespace
 
 
 class SupportedHTTPMethod(Enum):
@@ -30,8 +31,6 @@ class BiometricApiClient:
 		)
 		self.username = self.settings.api_user
 		self.password = self.settings.get_password("api_password")
-		self.location = self.settings.location
-		self.last_sync_date = self.settings.last_sync_date
 		# For eTime Tracker Lite
 		self.server_type = self.settings.server_type
 		self.last_sync_datetime = self.settings.last_sync_datetime
@@ -48,26 +47,46 @@ class BiometricApiClient:
 			}
 		)
 
-	def get_device_logs(self):
+	def get_device_logs(self, location = None, last_sync_date = None):
 		from biometric_integration.biometric_integration.api.utils import create_biometric_log
 
 		"""Send SOAP request to get device logs for a given date (YYYY-MM-DD or YYYY/MM/DD)"""
 		server_type = (self.settings.server_type or "").strip()
 		if server_type == "Bio Server":
 			try:
-				log_date = self._format_log_date(self.last_sync_date)
-				body = self._build_soap_request(log_date)
+				if not location:
+					frappe.log_error(title="Location is missing", message=f"Location is required")
+					return {"status": "error", "message": f"Location is required"}
+
+				if not last_sync_date:
+					frappe.log_error(title="Last sync date is missing", message=f"Last sync date is required")
+					return {"status": "error", "message": f"Last sync date is required"}
+
+				log_date = self._format_log_date(last_sync_date)
+				body = self._build_soap_request(log_date, location)
 
 				log = create_biometric_log(
 					method=self.get_device_logs.__name__, request_data=body, make_new=True
 				)
 				frappe.flags.request_id = log.name
-				response = requests.post(
-					self.base_url,
-					data=body,
-					headers={**self.headers, **{"SOAPAction": "http://tempuri.org/GetDeviceLogs"}},
-					timeout=30,
+				# response = requests.post(
+				# 	self.base_url,
+				# 	data=body,
+				# 	headers={**self.headers, **{"SOAPAction": "http://tempuri.org/GetDeviceLogs"}},
+				# 	timeout=30,
+				# )
+
+				# suceess
+				response = SimpleNamespace(
+					status_code=200,
+					text=f"{location} - {log_date}"
 				)
+
+				# failure
+				# response = SimpleNamespace(
+				# 	status_code=400,
+				# 	text=f"fail - {location} - {log_date}"
+				# )
 
 				if response.status_code == 200:
 					create_biometric_log(
@@ -133,11 +152,15 @@ class BiometricApiClient:
 		if "GetTransactionsLog" not in payload:
 			try:
 				frappe.flags.request_id = request_id
-				response = requests.post(
-					self.base_url,
-					data=payload,
-					headers={**self.headers, **{"SOAPAction": "http://tempuri.org/DeviceLogs"}},
-					timeout=30,
+				# response = requests.post(
+				# 	self.base_url,
+				# 	data=payload,
+				# 	headers={**self.headers, **{"SOAPAction": "http://tempuri.org/DeviceLogs"}},
+				# 	timeout=30,
+				# )
+				response = SimpleNamespace(
+					status_code=200,
+					text=f"retry job called"
 				)
 
 				if response.status_code == 200:
@@ -189,25 +212,37 @@ class BiometricApiClient:
 				frappe.log_error(title="Biometric API Error", message=frappe.get_traceback(e))
 				return {"status": "error", "message": str(e)}
 
-	def get_device_logs_for_date(self):
+	def get_device_logs_for_date(self, location = None, missing_date = None):
 		from biometric_integration.biometric_integration.api.utils import create_biometric_log
 
 		"""Send SOAP request to get device logs for a given date (YYYY-MM-DD or YYYY/MM/DD)"""
 		server_type = (self.settings.server_type or "").strip()
 		if server_type == "Bio Server":
 			try:
-				log_date = self._format_log_date(self.last_sync_date)
-				body = self._build_soap_request(log_date)
+				log_date = self._format_log_date(missing_date)
+				body = self._build_soap_request(log_date, location)
 
 				log = create_biometric_log(
-					method=self.get_device_logs.__name__, request_data=body, make_new=True
+					method=self.get_device_logs_for_date.__name__, request_data=body, make_new=True
 				)
 				frappe.flags.request_id = log.name
-				response = requests.post(
-					self.base_url,
-					data=body,
-					headers={**self.headers, **{"SOAPAction": "http://tempuri.org/GetDeviceLogs"}},
-					timeout=30,
+				# response = requests.post(
+				# 	self.base_url,
+				# 	data=body,
+				# 	headers={**self.headers, **{"SOAPAction": "http://tempuri.org/GetDeviceLogs"}},
+				# 	timeout=30,
+				# )
+
+				# suceess
+				# response = SimpleNamespace(
+				# 	status_code=200,
+				# 	text=f"{location} - {log_date}"
+				# )
+
+				# failure
+				response = SimpleNamespace(
+					status_code=400,
+					text=f"fail - {location} - {log_date}"
 				)
 
 				if response.status_code == 200:
@@ -239,7 +274,7 @@ class BiometricApiClient:
 				)
 
 				log = create_biometric_log(
-					method=self.get_device_logs.__name__, request_data=body, make_new=True
+					method=self.get_device_logs_for_date.__name__, request_data=body, make_new=True
 				)
 				frappe.flags.request_id = log.name
 				response = requests.post(
@@ -269,7 +304,7 @@ class BiometricApiClient:
 				frappe.log_error(title="Biometric API Error", message=frappe.get_traceback(e))
 				return {"status": "error", "message": str(e)}
 
-	def _build_soap_request(self, log_date):
+	def _build_soap_request(self, log_date, location):
 		"""Construct SOAP XML body"""
 		return f"""<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -279,7 +314,7 @@ class BiometricApiClient:
     <GetDeviceLogs xmlns="http://tempuri.org/">
       <UserName>{self.username}</UserName>
       <Password>{self.password}</Password>
-      <Location>{self.location}</Location>
+      <Location>{location}</Location>
       <LogDate>{log_date}</LogDate>
     </GetDeviceLogs>
   </soap:Body>

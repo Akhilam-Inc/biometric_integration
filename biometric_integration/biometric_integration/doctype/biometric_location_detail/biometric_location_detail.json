@@ -1,0 +1,51 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-06-04 16:54:44.770298",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "location",
+  "last_sync_date",
+  "sync_log"
+ ],
+ "fields": [
+  {
+   "fieldname": "location",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Location",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "last_sync_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Last Sync Date",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "sync_log",
+   "fieldtype": "Button",
+   "in_list_view": 1,
+   "label": "Sync Log"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-08 15:38:32.226800",
+ "modified_by": "Administrator",
+ "module": "Biometric Integration",
+ "name": "Biometric Location Detail",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
