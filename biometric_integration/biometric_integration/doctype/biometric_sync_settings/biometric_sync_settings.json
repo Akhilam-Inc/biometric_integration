@@ -8,19 +8,20 @@
   "server_type",
   "api_user",
   "api_password",
-  "last_sync_date",
-  "last_sync_datetime",
   "column_break_bvjr",
-  "location",
   "endpoint_url",
-  "sync_logs",
-  "serial_no",
   "biometric_location_detail",
-  "administrator_section",
-  "missing_date",
-  "sync_logs_for_missing_date"
+  "biometric_serial_detail"
  ],
  "fields": [
+  {
+   "default": "Bio Server",
+   "fieldname": "server_type",
+   "fieldtype": "Select",
+   "label": "Server Type",
+   "options": "Bio Server\neTime Tracker Lite",
+   "reqd": 1
+  },
   {
    "fieldname": "api_user",
    "fieldtype": "Data",
@@ -36,6 +37,10 @@
    "reqd": 1
   },
   {
+   "fieldname": "column_break_bvjr",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "endpoint_url",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -43,77 +48,24 @@
    "reqd": 1
   },
   {
-   "fieldname": "column_break_bvjr",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "sync_logs",
-   "fieldtype": "Button",
-   "hidden": 1,
-   "label": "Sync Logs"
-  },
-  {
-   "depends_on": "eval:doc.server_type == \"Bio Server\";",
-   "fieldname": "last_sync_date",
-   "fieldtype": "Date",
-   "hidden": 1,
-   "label": "Last Sync Date"
-  },
-  {
-   "depends_on": "eval:doc.server_type == \"Bio Server\";",
-   "fieldname": "location",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Location"
-  },
-  {
-   "default": "Bio Server",
-   "fieldname": "server_type",
-   "fieldtype": "Select",
-   "label": "Server Type",
-   "options": "Bio Server\neTime Tracker Lite",
-   "reqd": 1
-  },
-  {
-   "depends_on": "eval:doc.server_type == \"eTime Tracker Lite\";",
-   "fieldname": "last_sync_datetime",
-   "fieldtype": "Datetime",
-   "label": "Last Sync Datetime"
-  },
-  {
-   "depends_on": "eval:doc.server_type == \"eTime Tracker Lite\";",
-   "fieldname": "serial_no",
-   "fieldtype": "Data",
-   "label": "Serial No"
-  },
-  {
-   "depends_on": "eval:doc.server_type == \"eTime Tracker Lite\"",
-   "fieldname": "administrator_section",
-   "fieldtype": "Section Break",
-   "label": "Administrator"
-  },
-  {
-   "fieldname": "missing_date",
-   "fieldtype": "Datetime",
-   "label": "Missing Date"
-  },
-  {
-   "fieldname": "sync_logs_for_missing_date",
-   "fieldtype": "Button",
-   "label": "Sync Logs For Missing Date"
-  },
-  {
    "depends_on": "eval:doc.server_type == \"Bio Server\"",
    "fieldname": "biometric_location_detail",
    "fieldtype": "Table",
    "label": "Biometric Location Detail",
    "options": "Biometric Location Detail"
+  },
+  {
+   "depends_on": "eval:doc.server_type == \"eTime Tracker Lite\"",
+   "fieldname": "biometric_serial_detail",
+   "fieldtype": "Table",
+   "label": "Biometric Serial Detail",
+   "options": "Biometric Serial Detail"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-06-05 10:13:52.283571",
+ "modified": "2026-06-09 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Biometric Integration",
  "name": "Biometric Sync Settings",

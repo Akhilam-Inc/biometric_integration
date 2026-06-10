@@ -3,7 +3,7 @@
 
 frappe.ui.form.on("Biometric Sync Log", {
 	refresh: function (frm) {
-		if (frm.doc.request_data && frm.doc.status == "Error") {
+		if (frm.doc.status === "Error") {
 			frm.add_custom_button("Retry", function () {
 				frappe.call({
 					method: "biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.resync",

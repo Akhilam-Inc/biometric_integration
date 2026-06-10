@@ -13,7 +13,24 @@
   "message",
   "traceback",
   "request_data",
-  "response_data"
+  "response_data",
+  "sync_details_section",
+  "server_type",
+  "location",
+  "serial_no",
+  "sync_date",
+  "last_sync_datetime",
+  "is_missing_date_sync",
+  "total_records_received",
+  "employees_total",
+  "column_break_stats",
+  "checkins_created",
+  "checkins_skipped",
+  "employees_not_found",
+  "errored_count",
+  "skipped_inactive",
+  "sync_summary_section",
+  "sync_summary"
  ],
  "fields": [
   {
@@ -71,12 +88,131 @@
    "fieldtype": "Code",
    "label": "Response Data",
    "read_only": 1
+  },
+  {
+   "fieldname": "sync_details_section",
+   "fieldtype": "Section Break",
+   "label": "Sync Details"
+  },
+  {
+   "fieldname": "server_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Server Type",
+   "options": "\nBio Server\neTime Tracker Lite",
+   "read_only": 1
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Location",
+   "read_only": 1
+  },
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Serial No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sync_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sync Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_sync_datetime",
+   "fieldtype": "Datetime",
+   "label": "Last Sync Datetime",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_missing_date_sync",
+   "fieldtype": "Check",
+   "label": "Is Missing Date Sync",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "total_records_received",
+   "fieldtype": "Int",
+   "label": "Total Records Received",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "employees_total",
+   "fieldtype": "Int",
+   "label": "Employees / Records Total",
+   "description": "Bio Server: equals total_records_received. eTime: unique employees in response.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_stats",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "checkins_created",
+   "fieldtype": "Int",
+   "label": "Checkins Created",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "checkins_skipped",
+   "fieldtype": "Int",
+   "label": "Checkins Skipped",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "employees_not_found",
+   "fieldtype": "Int",
+   "label": "Employees Not Found",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "errored_count",
+   "fieldtype": "Int",
+   "label": "Errored Count",
+   "description": "Employees that matched but threw insert errors.",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "skipped_inactive",
+   "fieldtype": "Int",
+   "label": "Skipped Inactive",
+   "description": "Employees skipped because their ERP status is not Active.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sync_summary_section",
+   "fieldtype": "Section Break",
+   "label": "Sync Summary"
+  },
+  {
+   "fieldname": "sync_summary",
+   "fieldtype": "Code",
+   "label": "Sync Summary",
+   "options": "JSON",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-07-28 14:31:21.933926",
+ "modified": "2026-06-09 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Biometric Integration",
  "name": "Biometric Sync Log",
