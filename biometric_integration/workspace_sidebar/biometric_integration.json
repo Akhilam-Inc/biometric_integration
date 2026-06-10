@@ -1,0 +1,53 @@
+{
+ "app": "biometric_integration",
+ "creation": "2026-06-10 16:05:48.197737",
+ "docstatus": 0,
+ "doctype": "Workspace Sidebar",
+ "header_icon": "grid",
+ "idx": 1,
+ "items": [
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "setting-gear",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Biometric Sync Settings",
+   "link_to": "Biometric Sync Settings",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "badge-check",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Biometric Sync Logs",
+   "link_to": "Biometric Sync Log",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "grid",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Biometric Sync Dashboard",
+   "link_to": "biometric-sync-dashboard",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-06-10 17:37:57.932934",
+ "modified_by": "Administrator",
+ "module": "Biometric Integration",
+ "name": "Biometric Integration",
+ "owner": "Administrator",
+ "standard": 1,
+ "title": "Biometric Integration"
+}

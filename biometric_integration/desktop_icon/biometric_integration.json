@@ -1,0 +1,22 @@
+{
+ "app": "biometric_integration",
+ "bg_color": "blue",
+ "creation": "2026-06-10 16:00:09.003487",
+ "docstatus": 0,
+ "doctype": "Desktop Icon",
+ "hidden": 0,
+ "icon_image": "/private/files/fingerprint.png",
+ "icon_type": "Link",
+ "idx": 0,
+ "label": "Biometric Integration",
+ "link_to": "Biometric Integration",
+ "link_type": "Workspace Sidebar",
+ "modified": "2026-06-10 17:18:25.528612",
+ "modified_by": "Administrator",
+ "name": "Biometric Integration",
+ "owner": "Administrator",
+ "restrict_removal": 0,
+ "roles": [],
+ "sidebar": "Biometric Integration",
+ "standard": 1
+}

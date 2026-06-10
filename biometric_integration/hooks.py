@@ -11,15 +11,14 @@ app_license = "mit"
 # required_apps = []
 
 # Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "biometric_integration",
-# 		"logo": "/assets/biometric_integration/logo.png",
-# 		"title": "Biometric Integraion",
-# 		"route": "/biometric_integration",
-# 		"has_permission": "biometric_integration.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": "biometric_integration",
+		"logo": "/assets/biometric_integration/logo.png",
+		"title": "Biometric Integration",
+		"route": "/biometric_integration",
+	}
+]
 
 # Includes in <head>
 # ------------------
@@ -210,7 +209,6 @@ scheduler_events = {
 
 # User Data Protection
 # --------------------
-
 # user_data_fields = [
 # 	{
 # 		"doctype": "{doctype_1}",
