@@ -412,6 +412,28 @@ def get_log_detail(log_name):
 		except Exception:
 			pass
 
+	unit = doc.location if doc.server_type == "Bio Server" else doc.serial_no
+
+	checkins_by_employee = []
+	if unit and doc.sync_date:
+		checkins_by_employee = frappe.db.sql(
+			"""
+			SELECT
+				ec.employee,
+				e.employee_name,
+				COUNT(*) AS total,
+				SUM(CASE WHEN ec.log_type = 'IN'  THEN 1 ELSE 0 END) AS in_count,
+				SUM(CASE WHEN ec.log_type = 'OUT' THEN 1 ELSE 0 END) AS out_count
+			FROM `tabEmployee Checkin` ec
+			JOIN `tabEmployee` e ON e.name = ec.employee
+			WHERE ec.device_id = %(unit)s AND DATE(ec.time) = %(sync_date)s
+			GROUP BY ec.employee, e.employee_name
+			ORDER BY total DESC
+			""",
+			{"unit": unit, "sync_date": doc.sync_date},
+			as_dict=True,
+		)
+
 	return {
 		"name": doc.name,
 		"status": doc.status,
@@ -432,6 +454,156 @@ def get_log_detail(log_name):
 		"has_response_data": bool(doc.response_data),
 		# --- lists from summary (needed for detail drawer chips) ---
 		"summary": summary,
+		# --- per-employee checkin breakdown for this unit + date ---
+		"checkins_by_employee": checkins_by_employee,
+	}
+
+
+# ---------------------------------------------------------------------------
+# Employee mapping & employee-centric history
+# ---------------------------------------------------------------------------
+
+
+@frappe.whitelist()
+def search_employees(txt="", only_unmapped=False):
+	"""Search employees for the Quick Map modal / Employee tab autocomplete."""
+	frappe.only_for("System Manager")
+
+	if isinstance(only_unmapped, str):
+		only_unmapped = only_unmapped.lower() in ("1", "true", "yes")
+
+	filters = {}
+	if only_unmapped:
+		filters["attendance_device_id"] = ["in", ["", None]]
+
+	or_filters = None
+	if txt:
+		or_filters = {
+			"employee_name": ["like", f"%{txt}%"],
+			"name": ["like", f"%{txt}%"],
+		}
+
+	return frappe.get_list(
+		"Employee",
+		filters=filters,
+		or_filters=or_filters,
+		fields=["name", "employee_name", "department", "attendance_device_id", "status"],
+		limit=20,
+		order_by="employee_name asc",
+	)
+
+
+@frappe.whitelist()
+def map_device_id(device_id, employee):
+	"""Map an unmapped device ID to an Employee's attendance_device_id."""
+	frappe.only_for("System Manager")
+
+	existing = frappe.db.get_value("Employee", {"attendance_device_id": device_id})
+	if existing and existing != employee:
+		frappe.throw(_("Device ID {0} is already mapped to employee {1}").format(device_id, existing))
+
+	frappe.db.set_value("Employee", employee, "attendance_device_id", device_id)
+	return {"employee": employee, "device_id": device_id}
+
+
+@frappe.whitelist()
+def get_employee_history(employee, from_date, to_date):
+	"""
+	Per-employee daily checkin breakdown for a date range, plus sync-issue
+	flags derived from Biometric Sync Log summaries for the employee's
+	mapped device ID.
+	"""
+	frappe.only_for("System Manager")
+
+	emp = frappe.db.get_value(
+		"Employee", employee, ["employee_name", "attendance_device_id"], as_dict=True
+	)
+	if not emp:
+		frappe.throw(_("Employee {0} not found").format(employee))
+
+	_s, server_type, _unit_col, _all_units = _settings()
+
+	checkins = frappe.db.sql(
+		"""
+		SELECT time, log_type, device_id
+		FROM `tabEmployee Checkin`
+		WHERE employee = %(employee)s
+		  AND DATE(time) BETWEEN %(from_date)s AND %(to_date)s
+		ORDER BY time ASC
+		""",
+		{"employee": employee, "from_date": from_date, "to_date": to_date},
+		as_dict=True,
+	)
+
+	by_date = {}
+	for c in checkins:
+		d = str(getdate(c.time))
+		by_date.setdefault(d, []).append(
+			{"time": str(c.time), "log_type": c.log_type, "device_id": c.device_id}
+		)
+
+	# Sync-issue lookup: scan logs for the employee's device ID in the date range
+	issue_by_date = {}
+	if emp.attendance_device_id:
+		logs = frappe.db.sql(
+			"""
+			SELECT name, sync_date, sync_summary
+			FROM `tabBiometric Sync Log`
+			WHERE sync_date BETWEEN %(from_date)s AND %(to_date)s
+			  AND server_type = %(server_type)s
+			ORDER BY sync_date ASC, modified DESC
+			""",
+			{"from_date": from_date, "to_date": to_date, "server_type": server_type},
+			as_dict=True,
+		)
+		seen_dates = set()
+		for log in logs:
+			d = str(log.sync_date)
+			if d in seen_dates:
+				continue
+			if not log.sync_summary:
+				continue
+			try:
+				s = json.loads(log.sync_summary)
+			except Exception:
+				continue
+			device_id = emp.attendance_device_id
+			if device_id in (s.get("skipped_no_employee") or []) or device_id in (
+				s.get("errored_employees") or []
+			):
+				issue_by_date[d] = log.name
+				seen_dates.add(d)
+
+	from_d = getdate(from_date)
+	to_d   = getdate(to_date)
+
+	rows = []
+	d = from_d
+	while d <= to_d:
+		key = str(d)
+		rows.append(
+			{
+				"date": key,
+				"checkins": by_date.get(key, []),
+				"sync_issue": key in issue_by_date,
+				"log_name": issue_by_date.get(key),
+			}
+		)
+		d = add_days(d, 1)
+
+	summary = {
+		"days_in_range": (to_d - from_d).days + 1,
+		"days_with_checkin": sum(1 for r in rows if r["checkins"]),
+		"total_checkins": sum(len(r["checkins"]) for r in rows),
+		"sync_issue_days": sum(1 for r in rows if r["sync_issue"]),
+	}
+
+	return {
+		"employee": employee,
+		"employee_name": emp.employee_name,
+		"attendance_device_id": emp.attendance_device_id or None,
+		"summary": summary,
+		"rows": rows,
 	}
 
 
