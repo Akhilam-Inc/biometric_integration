@@ -45,6 +45,7 @@ class BiometricSyncLog(Document):
 # Low-level log record helper (used by BiometricApiClient)
 # ---------------------------------------------------------------------------
 
+
 def create_log(
 	module_def="Biometric Integration",
 	status="Queued",
@@ -99,6 +100,7 @@ def _get_message(exception):
 # Retry management
 # ---------------------------------------------------------------------------
 
+
 @frappe.whitelist()
 def resync(method, name, request_data):
 	_retry_job(name)
@@ -139,6 +141,7 @@ def bulk_retry(names):
 # ---------------------------------------------------------------------------
 # Scheduler entry point
 # ---------------------------------------------------------------------------
+
 
 def sync_all():
 	"""
@@ -222,6 +225,7 @@ def sync_all():
 # ---------------------------------------------------------------------------
 # Universal sync job (Bio Server + eTime Tracker Lite)
 # ---------------------------------------------------------------------------
+
 
 @frappe.whitelist()
 def run_sync_job_background(
@@ -329,6 +333,7 @@ def _process_response(server_type, response_text, serial_no=None):
 # Settings pointer helpers
 # ---------------------------------------------------------------------------
 
+
 def update_biometric_sync_settings(location, next_sync_date):
 	row = frappe.db.get_value(
 		"Biometric Location Detail",
@@ -343,9 +348,7 @@ def update_biometric_sync_settings(location, next_sync_date):
 			next_sync_date,
 			update_modified=False,
 		)
-		frappe.publish_realtime(
-			"biometric_sync_update", {"location": location, "status": "success"}
-		)
+		frappe.publish_realtime("biometric_sync_update", {"location": location, "status": "success"})
 
 
 def update_etime_sync_settings(serial_no, last_sync_datetime):
@@ -362,14 +365,13 @@ def update_etime_sync_settings(serial_no, last_sync_datetime):
 			last_sync_datetime,
 			update_modified=False,
 		)
-		frappe.publish_realtime(
-			"biometric_sync_update", {"serial_no": serial_no, "status": "success"}
-		)
+		frappe.publish_realtime("biometric_sync_update", {"serial_no": serial_no, "status": "success"})
 
 
 # ---------------------------------------------------------------------------
 # Structured log writer
 # ---------------------------------------------------------------------------
+
 
 def _write_sync_log(
 	server_type,
@@ -398,19 +400,17 @@ def _write_sync_log(
 		doc.last_sync_datetime = last_sync_datetime
 		doc.is_missing_date_sync = 1 if is_missing_date else 0
 		doc.total_records_received = stats.get("total_records_received", 0)
-		doc.employees_total        = stats.get("employees_total", 0)
-		doc.checkins_created       = stats.get("created", 0)
-		doc.checkins_skipped       = stats.get("skipped_duplicate", 0)
-		doc.employees_not_found    = len(stats.get("skipped_no_employee", []))
-		doc.errored_count          = len(stats.get("errored_employees", []))
-		doc.skipped_inactive       = len(stats.get("skipped_inactive", []))
+		doc.employees_total = stats.get("employees_total", 0)
+		doc.checkins_created = stats.get("created", 0)
+		doc.checkins_skipped = stats.get("skipped_duplicate", 0)
+		doc.employees_not_found = len(stats.get("skipped_no_employee", []))
+		doc.errored_count = len(stats.get("errored_employees", []))
+		doc.skipped_inactive = len(stats.get("skipped_inactive", []))
 		doc.sync_summary = json.dumps(stats, separators=(",", ":"))
 		doc.save(ignore_permissions=True)
 		frappe.db.commit()
 	except Exception:
-		frappe.log_error(
-			title="Biometric: _write_sync_log failed", message=frappe.get_traceback()
-		)
+		frappe.log_error(title="Biometric: _write_sync_log failed", message=frappe.get_traceback())
 	finally:
 		# Always release the flag — this job is done with the log record
 		frappe.flags.request_id = None
@@ -533,6 +533,7 @@ def process_device_logs(response_text):
 # eTime Tracker Lite response processor
 # ---------------------------------------------------------------------------
 
+
 def process_device_logs_etime(response_text, serial_no=None):
 	"""
 	Parse eTime Tracker Lite GetTransactionsLog SOAP response and create Employee Checkins.
@@ -563,20 +564,14 @@ def process_device_logs_etime(response_text, serial_no=None):
 	if resp is None:
 		fault = body.find("soap:Fault", ns)
 		if fault is not None:
-			frappe.log_error(
-				title="eTime SOAP Fault", message=ET.tostring(fault, encoding="unicode")
-			)
+			frappe.log_error(title="eTime SOAP Fault", message=ET.tostring(fault, encoding="unicode"))
 		else:
-			frappe.log_error(
-				title="eTime SOAP error", message="Missing GetTransactionsLogResponse"
-			)
+			frappe.log_error(title="eTime SOAP error", message="Missing GetTransactionsLogResponse")
 		return dict(_EMPTY_STATS)
 
 	data_el = resp.find("t:strDataList", ns)
 	if data_el is None:
-		frappe.log_error(
-			title="eTime: strDataList missing", message=ET.tostring(resp, encoding="unicode")
-		)
+		frappe.log_error(title="eTime: strDataList missing", message=ET.tostring(resp, encoding="unicode"))
 		return dict(_EMPTY_STATS)
 
 	blob = (data_el.text or "").strip()
@@ -626,9 +621,7 @@ def process_device_logs_etime(response_text, serial_no=None):
 				skipped_no_employee.append(emp_code)
 				continue
 
-			emp_details = frappe.db.get_value(
-				"Employee", employee, ["name", "status"], as_dict=True
-			)
+			emp_details = frappe.db.get_value("Employee", employee, ["name", "status"], as_dict=True)
 
 			if emp_details.status != "Active":
 				skipped_inactive.append(emp_code)
@@ -636,9 +629,7 @@ def process_device_logs_etime(response_text, serial_no=None):
 
 			for log_time in unique_times:
 				try:
-					if not frappe.db.exists(
-						"Employee Checkin", {"employee": employee, "time": log_time}
-					):
+					if not frappe.db.exists("Employee Checkin", {"employee": employee, "time": log_time}):
 						frappe.get_doc(
 							{
 								"doctype": "Employee Checkin",
@@ -686,6 +677,7 @@ def process_device_logs_etime(response_text, serial_no=None):
 # ---------------------------------------------------------------------------
 # Webhook — attendance push from device (unchanged)
 # ---------------------------------------------------------------------------
+
 
 @frappe.whitelist(allow_guest=True)
 def attendance_log():

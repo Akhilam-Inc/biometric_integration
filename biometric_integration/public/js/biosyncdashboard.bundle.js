@@ -1,5 +1,5 @@
-import { createApp } from 'vue';
-import BiometricSyncDashboard from './BiometricSyncDashboard.vue';
+import { createApp } from "vue";
+import BiometricSyncDashboard from "./BiometricSyncDashboard.vue";
 
 class BiometricSyncDashboardUI {
 	constructor({ wrapper, page }) {
@@ -24,7 +24,7 @@ class BiometricSyncDashboardUI {
 	}
 }
 
-frappe.provide('biosyncdashboard.ui');
+frappe.provide("biosyncdashboard.ui");
 biosyncdashboard.ui.BiometricSyncDashboardUI = BiometricSyncDashboardUI;
 
 export default BiometricSyncDashboardUI;
