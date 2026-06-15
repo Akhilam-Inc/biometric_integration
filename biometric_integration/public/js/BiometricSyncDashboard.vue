@@ -45,6 +45,10 @@
         @click="activeTab = 'unit'">
         Location / Serial No
       </button>
+      <button :class="['bsd-tab', { active: activeTab === 'employee' }]"
+        @click="activeTab = 'employee'">
+        Employee View
+      </button>
     </div>
 
     <!-- ════════════════════════ TAB 1: DAILY VIEW ════════════════ -->
@@ -503,10 +507,142 @@
     </template>
     <!-- ════ END TAB 2 ════════════════════════════════════════════ -->
 
+    <!-- ════════════════════════ TAB 3: EMPLOYEE VIEW ═════════════ -->
+    <template v-else-if="activeTab === 'employee'">
+
+      <!-- Employee + date range filter bar -->
+      <div class="bsd-unit-filter-bar">
+        <div class="bsd-filter-group">
+          <label>Employee</label>
+          <button class="bsd-select bsd-emp-picker" @click="empSearchOpen = true">
+            <span v-if="empFilter">{{ empFilter.employee_name }} ({{ empFilter.name }})</span>
+            <span v-else class="bsd-nil">— Select Employee —</span>
+          </button>
+        </div>
+        <div class="bsd-filter-group">
+          <label>From Date</label>
+          <input type="date" v-model="empFromDate" class="bsd-date-input" />
+        </div>
+        <div class="bsd-filter-group">
+          <label>To Date</label>
+          <input type="date" v-model="empToDate" class="bsd-date-input" />
+        </div>
+        <button class="bsd-btn-primary bsd-load-btn"
+          @click="loadEmployeeHistory"
+          :disabled="!empFilter || empLoading">
+          {{ empLoading ? 'Loading…' : 'Load History' }}
+        </button>
+      </div>
+
+      <div v-if="empLoading" class="bsd-loading">
+        <div class="bsd-spinner"></div>
+        <span>Loading employee history…</span>
+      </div>
+
+      <template v-else-if="empHistory">
+
+        <!-- Employee header strip -->
+        <div class="bsd-card bsd-emp-header-card">
+          <div class="bsd-emp-header-main">
+            <div class="bsd-emp-header-name">{{ empHistory.employee_name }}</div>
+            <div class="bsd-emp-header-id">{{ empHistory.employee }}</div>
+          </div>
+          <div class="bsd-emp-header-device">
+            <span v-if="empHistory.attendance_device_id" class="bsd-pill pill-success">
+              Device ID: {{ empHistory.attendance_device_id }}
+            </span>
+            <template v-else>
+              <span class="bsd-pill pill-warning">Not Mapped</span>
+              <button class="bsd-action-btn trigger" @click="openMapModal(null)">Map Device ID</button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Summary stats strip -->
+        <div class="bsd-unit-summary-bar">
+          <div class="bsd-sum-stat">
+            <div class="bsd-sum-value">{{ empHistory.summary.days_in_range }}</div>
+            <div class="bsd-sum-label">Days in Range</div>
+          </div>
+          <div class="bsd-sum-stat ok">
+            <div class="bsd-sum-value">{{ empHistory.summary.days_with_checkin }}</div>
+            <div class="bsd-sum-label">Days With Checkins</div>
+          </div>
+          <div class="bsd-sum-stat">
+            <div class="bsd-sum-value">{{ empHistory.summary.total_checkins }}</div>
+            <div class="bsd-sum-label">Total Checkins</div>
+          </div>
+          <div class="bsd-sum-stat warn" v-if="empHistory.summary.sync_issue_days > 0">
+            <div class="bsd-sum-value">{{ empHistory.summary.sync_issue_days }}</div>
+            <div class="bsd-sum-label">Sync Issue Days</div>
+          </div>
+        </div>
+
+        <!-- Daily breakdown table -->
+        <div class="bsd-card bsd-table-card">
+          <div class="bsd-card-header">
+            <h4>Daily Checkin Breakdown</h4>
+            <div class="bsd-table-meta">
+              {{ empHistory.rows.length }} days · {{ empFromDate }} to {{ empToDate }}
+            </div>
+          </div>
+          <div class="bsd-table-wrap">
+            <table class="bsd-table">
+              <thead>
+                <tr>
+                  <th class="col-dot"></th>
+                  <th>Date</th>
+                  <th>Checkins</th>
+                  <th class="num-col">Count</th>
+                  <th>Sync Issue</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in empHistory.rows" :key="row.date"
+                  :class="['bsd-row', row.sync_issue ? 'bsd-row-warning' : '']">
+                  <td class="col-dot">
+                    <span class="bsd-dot" :class="row.checkins.length ? 'dot-success' : 'dot-empty'"></span>
+                  </td>
+                  <td class="bsd-date-cell">{{ row.date }}</td>
+                  <td>
+                    <span v-if="row.checkins.length" class="bsd-tag-list">
+                      <span v-for="(c, i) in row.checkins" :key="i" class="bsd-tag"
+                        :class="c.log_type === 'OUT' ? 'bsd-tag-out' : 'bsd-tag-in'">
+                        {{ c.log_type }} {{ fmtTime(c.time) }}
+                      </span>
+                    </span>
+                    <span v-else class="bsd-nil">No checkins</span>
+                  </td>
+                  <td class="num-col">{{ row.checkins.length }}</td>
+                  <td>
+                    <a v-if="row.sync_issue && row.log_name"
+                      :href="`/app/biometric-sync-log/${row.log_name}`"
+                      target="_blank" class="bsd-pill pill-warning">
+                      Issue ↗
+                    </a>
+                    <span v-else class="bsd-nil">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </template>
+
+      <div v-else-if="!empLoading && !empHistory" class="bsd-tab2-hint">
+        Select an employee and date range, then click <strong>Load History</strong>
+        to view their daily checkin breakdown.
+      </div>
+
+    </template>
+    <!-- ════ END TAB 3 ════════════════════════════════════════════ -->
+
     <!-- ─────────────────────────── DRAWER ───────────────────────── -->
+    <Teleport to="body">
     <transition name="drawer-slide">
       <div v-if="drawerRow" class="bsd-drawer-overlay" @click.self="closeDrawer">
-        <div class="bsd-drawer">
+        <div class="bsd-drawer bsd-drawer-wide">
           <div class="bsd-drawer-header">
             <div>
               <strong>{{ drawerRow.unit }}</strong>
@@ -523,111 +659,208 @@
 
           <template v-else-if="drawerDetail">
 
-            <!-- ── Section 1: Device/Punch metrics ── -->
-            <div class="bsd-drawer-section">
-              <div class="bsd-drawer-section-title">
-                {{ isEtime ? 'Employee Records (Device Response)' : 'Punch Records (Device Response)' }}
-              </div>
-              <div class="bsd-drawer-stats">
-                <div class="bsd-stat-row">
-                  <span class="bsd-stat-label">Raw Records Received</span>
-                  <span class="bsd-stat-value">{{ drawerDetail.total_records_received.toLocaleString() }}</span>
-                </div>
-                <div class="bsd-stat-row">
-                  <span class="bsd-stat-label">
-                    {{ isEtime ? 'Unique Employees in Response' : 'Total Punch Events' }}
-                  </span>
-                  <span class="bsd-stat-value muted">{{ drawerDetail.employees_total.toLocaleString() }}</span>
-                </div>
-              </div>
+            <!-- ── Drawer sub-tabs ── -->
+            <div class="bsd-drawer-tabs">
+              <button :class="['bsd-drawer-tab', { active: drawerTab === 'overview' }]"
+                @click="drawerTab = 'overview'">Overview</button>
+              <button :class="['bsd-drawer-tab', { active: drawerTab === 'issues' }]"
+                @click="drawerTab = 'issues'">
+                Issues
+                <span v-if="drawerIssueCount" class="bsd-drawer-tab-badge">{{ drawerIssueCount }}</span>
+              </button>
+              <button :class="['bsd-drawer-tab', { active: drawerTab === 'checkins' }]"
+                @click="drawerTab = 'checkins'">Checkins</button>
             </div>
 
-            <!-- ── Section 2: ERP processing results ── -->
-            <div class="bsd-drawer-section">
-              <div class="bsd-drawer-section-title">ERP Processing Results</div>
-              <div class="bsd-drawer-stats">
-                <div class="bsd-stat-row">
-                  <span class="bsd-stat-label">Checkins Created</span>
-                  <span class="bsd-stat-value ok">{{ drawerDetail.checkins_created.toLocaleString() }}</span>
+            <div class="bsd-drawer-body">
+
+              <!-- ════ OVERVIEW TAB ════ -->
+              <template v-if="drawerTab === 'overview'">
+
+                <div class="bsd-drawer-card">
+                  <div class="bsd-drawer-card-header">
+                    <span class="bsd-drawer-card-icon punch">⬡</span>
+                    <span class="bsd-drawer-card-title">
+                      {{ isEtime ? 'Employee Records (Device Response)' : 'Punch Records (Device Response)' }}
+                    </span>
+                  </div>
+                  <div class="bsd-drawer-stats">
+                    <div class="bsd-stat-row">
+                      <span class="bsd-stat-label">Raw Records Received</span>
+                      <span class="bsd-stat-value">{{ drawerDetail.total_records_received.toLocaleString() }}</span>
+                    </div>
+                    <div class="bsd-stat-row">
+                      <span class="bsd-stat-label">
+                        {{ isEtime ? 'Unique Employees in Response' : 'Total Punch Events' }}
+                      </span>
+                      <span class="bsd-stat-value muted">{{ drawerDetail.employees_total.toLocaleString() }}</span>
+                    </div>
+                  </div>
                 </div>
-                <div class="bsd-stat-row">
-                  <span class="bsd-stat-label">Duplicates Skipped</span>
-                  <span class="bsd-stat-value muted">{{ drawerDetail.checkins_skipped.toLocaleString() }}</span>
+
+                <div class="bsd-drawer-card">
+                  <div class="bsd-drawer-card-header">
+                    <span class="bsd-drawer-card-icon created">✓</span>
+                    <span class="bsd-drawer-card-title">ERP Processing Results</span>
+                  </div>
+                  <div class="bsd-drawer-stats">
+                    <div class="bsd-stat-row">
+                      <span class="bsd-stat-label">Checkins Created</span>
+                      <span class="bsd-stat-value ok">{{ drawerDetail.checkins_created.toLocaleString() }}</span>
+                    </div>
+                    <div class="bsd-stat-row">
+                      <span class="bsd-stat-label">Duplicates Skipped</span>
+                      <span class="bsd-stat-value muted">{{ drawerDetail.checkins_skipped.toLocaleString() }}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
+
+                <div class="bsd-drawer-card">
+                  <div class="bsd-drawer-card-header">
+                    <span class="bsd-drawer-card-icon info">ℹ</span>
+                    <span class="bsd-drawer-card-title">Log Info</span>
+                  </div>
+                  <div class="bsd-drawer-meta">
+                    <div class="bsd-meta-row">
+                      <span>Log Name</span>
+                      <a :href="`/app/biometric-sync-log/${drawerDetail.name}`" target="_blank">
+                        {{ drawerDetail.name }} ↗
+                      </a>
+                    </div>
+                    <div class="bsd-meta-row">
+                      <span>Sync Date</span><span>{{ drawerDetail.sync_date }}</span>
+                    </div>
+                    <div class="bsd-meta-row" v-if="drawerDetail.last_sync_datetime">
+                      <span>Last Sync Datetime</span>
+                      <span>{{ fmtDatetime(drawerDetail.last_sync_datetime) }}</span>
+                    </div>
+                    <div class="bsd-meta-row">
+                      <span>Missing-Date Sync</span>
+                      <span>{{ drawerDetail.is_missing_date_sync ? 'Yes' : 'No' }}</span>
+                    </div>
+                  </div>
+                </div>
+
+              </template>
+
+              <!-- ════ ISSUES TAB ════ -->
+              <template v-else-if="drawerTab === 'issues'">
+
+                <div class="bsd-drawer-card">
+                  <div class="bsd-drawer-card-header">
+                    <span class="bsd-drawer-card-icon unmapped">!</span>
+                    <span class="bsd-drawer-card-title">Employee Issues</span>
+                  </div>
+                  <div class="bsd-drawer-stats">
+                    <div class="bsd-stat-row">
+                      <span class="bsd-stat-label">Unmapped (device ID not in ERP)</span>
+                      <span class="bsd-stat-value warn">{{ drawerDetail.employees_not_found }}</span>
+                      <span class="bsd-stat-unit">employees</span>
+                    </div>
+                    <div class="bsd-stat-row">
+                      <span class="bsd-stat-label">Insert Errors</span>
+                      <span class="bsd-stat-value error">{{ drawerDetail.errored_count }}</span>
+                      <span class="bsd-stat-unit">employees</span>
+                    </div>
+                    <div class="bsd-stat-row">
+                      <span class="bsd-stat-label">Skipped (Inactive in ERP)</span>
+                      <span class="bsd-stat-value muted">{{ drawerDetail.skipped_inactive }}</span>
+                      <span class="bsd-stat-unit">employees</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ── Unmapped device IDs ── -->
+                <div v-if="drawerDetail.summary?.skipped_no_employee?.length" class="bsd-drawer-card">
+                  <div class="bsd-drawer-card-header">
+                    <span class="bsd-drawer-card-icon unmapped">!</span>
+                    <span class="bsd-drawer-card-title">
+                      Unmapped Device IDs ({{ drawerDetail.summary.skipped_no_employee.length }})
+                    </span>
+                    <button v-if="drawerDetail.summary.skipped_no_employee.length > 8"
+                      class="bsd-accordion-toggle" @click="showAllUnmapped = !showAllUnmapped">
+                      {{ showAllUnmapped ? 'Show less' : 'Show all' }}
+                    </button>
+                  </div>
+                  <div class="bsd-tag-list">
+                    <span v-for="id in (showAllUnmapped
+                        ? drawerDetail.summary.skipped_no_employee
+                        : drawerDetail.summary.skipped_no_employee.slice(0, 8))"
+                      :key="id" class="bsd-tag bsd-tag-mappable">
+                      {{ id }}
+                      <button class="bsd-tag-map-btn" title="Map this device ID to an Employee"
+                        @click="openMapModal(id)">Map</button>
+                    </span>
+                  </div>
+                </div>
+
+                <!-- ── Errored employees ── -->
+                <div v-if="drawerDetail.summary?.errored_employees?.length" class="bsd-drawer-card">
+                  <div class="bsd-drawer-card-header">
+                    <span class="bsd-drawer-card-icon api-err">✕</span>
+                    <span class="bsd-drawer-card-title">
+                      Insert Errors ({{ drawerDetail.summary.errored_employees.length }})
+                    </span>
+                    <button v-if="drawerDetail.summary.errored_employees.length > 8"
+                      class="bsd-accordion-toggle" @click="showAllErrored = !showAllErrored">
+                      {{ showAllErrored ? 'Show less' : 'Show all' }}
+                    </button>
+                  </div>
+                  <div class="bsd-tag-list">
+                    <span v-for="emp in (showAllErrored
+                        ? drawerDetail.summary.errored_employees
+                        : drawerDetail.summary.errored_employees.slice(0, 8))"
+                      :key="emp" class="bsd-tag bsd-tag-err">
+                      {{ emp }}
+                    </span>
+                  </div>
+                </div>
+
+                <div v-if="!drawerDetail.summary?.skipped_no_employee?.length && !drawerDetail.summary?.errored_employees?.length"
+                  class="bsd-drawer-empty">
+                  No employee issues for this log. 🎉
+                </div>
+
+              </template>
+
+              <!-- ════ CHECKINS TAB ════ -->
+              <template v-else-if="drawerTab === 'checkins'">
+
+                <div class="bsd-drawer-card">
+                  <div class="bsd-drawer-card-header">
+                    <span class="bsd-drawer-card-icon created">✓</span>
+                    <span class="bsd-drawer-card-title">
+                      Checkins Created — by Employee ({{ drawerDetail.checkins_by_employee.length }})
+                    </span>
+                  </div>
+                  <div v-if="drawerDetail.checkins_by_employee.length" class="bsd-table-wrap">
+                    <table class="bsd-table">
+                      <thead>
+                        <tr>
+                          <th>Employee</th>
+                          <th>Name</th>
+                          <th class="num-col">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="row in drawerDetail.checkins_by_employee" :key="row.employee">
+                          <td>{{ row.employee }}</td>
+                          <td>{{ row.employee_name }}</td>
+                          <td class="num-col">{{ row.total }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div v-else class="bsd-drawer-empty">
+                    No checkins were created for this date/unit.
+                  </div>
+                </div>
+
+              </template>
+
             </div>
 
-            <!-- ── Section 3: Employee-level issues ── -->
-            <div class="bsd-drawer-section">
-              <div class="bsd-drawer-section-title">Employee Issues</div>
-              <div class="bsd-drawer-stats">
-                <div class="bsd-stat-row">
-                  <span class="bsd-stat-label">Unmapped (device ID not in ERP)</span>
-                  <span class="bsd-stat-value warn">{{ drawerDetail.employees_not_found }}</span>
-                  <span class="bsd-stat-unit">employees</span>
-                </div>
-                <div class="bsd-stat-row">
-                  <span class="bsd-stat-label">Insert Errors</span>
-                  <span class="bsd-stat-value error">{{ drawerDetail.errored_count }}</span>
-                  <span class="bsd-stat-unit">employees</span>
-                </div>
-                <div class="bsd-stat-row">
-                  <span class="bsd-stat-label">Skipped (Inactive in ERP)</span>
-                  <span class="bsd-stat-value muted">{{ drawerDetail.skipped_inactive }}</span>
-                  <span class="bsd-stat-unit">employees</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- ── Log metadata ── -->
-            <div class="bsd-drawer-section">
-              <div class="bsd-drawer-section-title">Log Info</div>
-              <div class="bsd-drawer-meta">
-                <div class="bsd-meta-row">
-                  <span>Log Name</span>
-                  <a :href="`/app/biometric-sync-log/${drawerDetail.name}`" target="_blank">
-                    {{ drawerDetail.name }} ↗
-                  </a>
-                </div>
-                <div class="bsd-meta-row">
-                  <span>Sync Date</span><span>{{ drawerDetail.sync_date }}</span>
-                </div>
-                <div class="bsd-meta-row" v-if="drawerDetail.last_sync_datetime">
-                  <span>Last Sync Datetime</span>
-                  <span>{{ fmtDatetime(drawerDetail.last_sync_datetime) }}</span>
-                </div>
-                <div class="bsd-meta-row">
-                  <span>Missing-Date Sync</span>
-                  <span>{{ drawerDetail.is_missing_date_sync ? 'Yes' : 'No' }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- ── Unmapped device IDs ── -->
-            <div v-if="drawerDetail.summary?.skipped_no_employee?.length" class="bsd-drawer-section">
-              <div class="bsd-drawer-section-title">
-                Unmapped Device IDs ({{ drawerDetail.summary.skipped_no_employee.length }})
-              </div>
-              <div class="bsd-tag-list">
-                <span v-for="id in drawerDetail.summary.skipped_no_employee" :key="id" class="bsd-tag">
-                  {{ id }}
-                </span>
-              </div>
-            </div>
-
-            <!-- ── Errored employees ── -->
-            <div v-if="drawerDetail.summary?.errored_employees?.length" class="bsd-drawer-section">
-              <div class="bsd-drawer-section-title">
-                Insert Errors ({{ drawerDetail.summary.errored_employees.length }})
-              </div>
-              <div class="bsd-tag-list">
-                <span v-for="emp in drawerDetail.summary.errored_employees" :key="emp" class="bsd-tag bsd-tag-err">
-                  {{ emp }}
-                </span>
-              </div>
-            </div>
-
-            <!-- ── Actions ── -->
+            <!-- ── Actions footer ── -->
             <div class="bsd-drawer-actions">
               <button v-if="drawerRow.status === 'error'"
                 class="bsd-btn-primary"
@@ -635,7 +868,7 @@
                 title="Re-fetch exactly this date's data from the device">
                 ↻ Retry API (1 day only)
               </button>
-              <button v-if="drawerDetail.has_response_data && drawerRow.status !== 'error'"
+              <button v-if="drawerDetail.has_response_data && drawerRow.status !== 'error' && drawerHasIssues"
                 class="bsd-btn-secondary"
                 @click="doRetryCheckin(drawerDetail.name)"
                 title="Re-process stored response — no API call">
@@ -656,11 +889,52 @@
         </div>
       </div>
     </transition>
+    </Teleport>
+
+    <!-- ─────────────────── EMPLOYEE SEARCH MODAL (Quick Map) ──────────── -->
+    <Teleport to="body">
+    <transition name="modal-fade">
+      <div v-if="empSearchOpen" class="bsd-modal-overlay" @click.self="closeEmpSearch">
+        <div class="bsd-modal">
+          <div class="bsd-modal-header">
+            <strong>{{ mappingDeviceId ? `Map Device ID: ${mappingDeviceId}` : 'Select Employee' }}</strong>
+            <button class="bsd-drawer-close" @click="closeEmpSearch">✕</button>
+          </div>
+          <div class="bsd-modal-body">
+            <input type="text" v-model="empSearchTxt" class="bsd-modal-search"
+              placeholder="Search by employee name or ID…" autofocus />
+            <div v-if="empSearchLoading" class="bsd-loading">
+              <div class="bsd-spinner"></div>
+            </div>
+            <div v-else class="bsd-modal-results">
+              <div v-for="emp in empSearchResults" :key="emp.name"
+                class="bsd-modal-result-row" @click="selectEmployee(emp)">
+                <div class="bsd-modal-result-main">
+                  <span class="bsd-modal-result-name">{{ emp.employee_name }}</span>
+                  <span class="bsd-modal-result-id">{{ emp.name }}</span>
+                </div>
+                <div class="bsd-modal-result-meta">
+                  <span v-if="emp.department">{{ emp.department }}</span>
+                  <span v-if="emp.attendance_device_id" class="bsd-pill pill-success">
+                    {{ emp.attendance_device_id }}
+                  </span>
+                  <span v-else class="bsd-pill pill-missing">No device ID</span>
+                </div>
+              </div>
+              <div v-if="!empSearchResults.length" class="bsd-drawer-empty">
+                No employees found.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 
 // ── API helper ────────────────────────────────────────────────────────────────
 
@@ -708,6 +982,11 @@ function progressClass(p) {
   return 'prog-red'
 }
 
+function fmtTime(dt) {
+  if (!dt) return '—'
+  return new Date(dt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+}
+
 // ── state ─────────────────────────────────────────────────────────────────────
 
 // Tab state
@@ -728,6 +1007,9 @@ const sortDir = ref('asc')
 const drawerRow     = ref(null)
 const drawerDetail  = ref(null)
 const drawerLoading = ref(false)
+const drawerTab     = ref('overview')
+const showAllUnmapped = ref(false)
+const showAllErrored  = ref(false)
 
 // Chart
 const trendChartEl = ref(null)
@@ -740,7 +1022,35 @@ const unitToDate   = ref(yesterday())
 const unitHistory  = ref(null)
 const unitLoading  = ref(false)
 
+// Employee history (Tab 3)
+const empFilter   = ref(null)
+const empFromDate = ref(daysAgo(7))
+const empToDate   = ref(yesterday())
+const empHistory  = ref(null)
+const empLoading  = ref(false)
+
+// Employee search modal (Quick Map + Tab 3 employee picker)
+const empSearchOpen    = ref(false)
+const empSearchTxt     = ref('')
+const empSearchResults = ref([])
+const empSearchLoading = ref(false)
+const mappingDeviceId  = ref(null)
+
 // ── computed ──────────────────────────────────────────────────────────────────
+
+const drawerIssueCount = computed(() => {
+  const d = drawerDetail.value
+  if (!d) return 0
+  return (d.summary?.skipped_no_employee?.length || 0) + (d.summary?.errored_employees?.length || 0)
+})
+
+// 100% success = unmapped, insert-errors and skipped-inactive all zero;
+// then there is nothing for "Recreate Checkins" to fix
+const drawerHasIssues = computed(() => {
+  const d = drawerDetail.value
+  if (!d) return false
+  return (d.employees_not_found || 0) + (d.errored_count || 0) + (d.skipped_inactive || 0) > 0
+})
 
 const isEtime = computed(() => dashData.value?.server_type === 'eTime Tracker Lite')
 
@@ -884,15 +1194,27 @@ function sort(col) {
 }
 
 async function openDrawer(row) {
-  drawerRow.value     = row
-  drawerDetail.value  = null
-  drawerLoading.value = true
+  drawerRow.value      = row
+  drawerDetail.value   = null
+  drawerLoading.value  = true
+  drawerTab.value      = 'overview'
+  showAllUnmapped.value = false
+  showAllErrored.value  = false
   try {
     drawerDetail.value = await call('get_log_detail', { log_name: row.log_name })
   } catch (e) {
     frappe.msgprint({ message: String(e), indicator: 'red' })
   } finally {
     drawerLoading.value = false
+  }
+}
+
+async function refreshDrawer() {
+  if (!drawerDetail.value) return
+  try {
+    drawerDetail.value = await call('get_log_detail', { log_name: drawerDetail.value.name })
+  } catch (e) {
+    frappe.msgprint({ message: String(e), indicator: 'red' })
   }
 }
 
@@ -948,6 +1270,94 @@ function openSettings() {
   frappe.set_route('Form', 'Biometric Sync Settings')
 }
 
+// ── Employee history (Tab 3) ──────────────────────────────────────────────────
+
+async function loadEmployeeHistory() {
+  if (!empFilter.value) return
+  empLoading.value = true
+  empHistory.value = null
+  try {
+    empHistory.value = await call('get_employee_history', {
+      employee:  empFilter.value.name,
+      from_date: empFromDate.value,
+      to_date:   empToDate.value,
+    })
+  } catch (e) {
+    frappe.msgprint({ message: String(e), title: 'History Error', indicator: 'red' })
+  } finally {
+    empLoading.value = false
+  }
+}
+
+// ── Employee search modal (Quick Map + Tab 3 picker) ──────────────────────────
+
+let empSearchDebounce = null
+watch([empSearchTxt, empSearchOpen], () => {
+  if (!empSearchOpen.value) return
+  clearTimeout(empSearchDebounce)
+  empSearchDebounce = setTimeout(runEmpSearch, 250)
+})
+
+async function runEmpSearch() {
+  empSearchLoading.value = true
+  try {
+    empSearchResults.value = await call('search_employees', {
+      txt: empSearchTxt.value,
+      only_unmapped: !!mappingDeviceId.value,
+    })
+  } catch (e) {
+    frappe.msgprint({ message: String(e), indicator: 'red' })
+  } finally {
+    empSearchLoading.value = false
+  }
+}
+
+function openMapModal(deviceId) {
+  mappingDeviceId.value  = deviceId
+  empSearchTxt.value     = ''
+  empSearchResults.value = []
+  empSearchOpen.value    = true
+  runEmpSearch()
+}
+
+function closeEmpSearch() {
+  empSearchOpen.value   = false
+  mappingDeviceId.value = null
+}
+
+async function selectEmployee(emp) {
+  if (mappingDeviceId.value) {
+    try {
+      await call('map_device_id', { device_id: mappingDeviceId.value, employee: emp.name })
+      frappe.show_alert({
+        message: `Mapped ${mappingDeviceId.value} → ${emp.employee_name}`,
+        indicator: 'green',
+      })
+      closeEmpSearch()
+
+      if (drawerDetail.value?.has_response_data) {
+        const recreate = await new Promise(res =>
+          frappe.confirm(
+            'Recreate checkins for this date now using the newly mapped employee?',
+            () => res(true), () => res(false)
+          )
+        )
+        if (recreate) {
+          await doRetryCheckin(drawerDetail.value.name)
+          return
+        }
+      }
+      await refreshDrawer()
+      loadAll()
+    } catch (e) {
+      frappe.msgprint({ message: String(e), indicator: 'red' })
+    }
+  } else {
+    empFilter.value = emp
+    closeEmpSearch()
+  }
+}
+
 // Re-render chart whenever we switch back to the daily tab — the DOM node is
 // destroyed and recreated by v-if, so the old chartInstance is stale.
 watch(activeTab, async (newTab) => {
@@ -956,6 +1366,19 @@ watch(activeTab, async (newTab) => {
     renderTrendChart()
     setTimeout(renderTrendChart, 200)
   }
+})
+
+// Lock background page scroll while the drawer or modal is open so wheel
+// events at the overlay's scroll boundary can't chain to the main view.
+watch([drawerRow, empSearchOpen], ([row, modal]) => {
+  const lock = !!row || !!modal
+  document.documentElement.style.overflow = lock ? 'hidden' : ''
+  document.body.style.overflow = lock ? 'hidden' : ''
+})
+
+onUnmounted(() => {
+  document.documentElement.style.overflow = ''
+  document.body.style.overflow = ''
 })
 
 onMounted(loadAll)
@@ -1276,21 +1699,22 @@ export const SortIcon = {
 
 /* ── drawer ──────────────────────────────────────────────────────────────────*/
 .bsd-drawer-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.25); z-index: 1000;
+  position: fixed; inset: 0; height: 100vh; background: rgba(0,0,0,0.25); z-index: 1000;
   display: flex; justify-content: flex-end;
 }
 .bsd-drawer {
-  width: 420px; max-width: 95vw; height: 100%; background: #fff;
-  overflow-y: auto; padding: 0 0 40px; display: flex; flex-direction: column;
+  width: 420px; max-width: 95vw; height: 100vh; background: #fff;
+  overflow: hidden; padding: 0; display: flex; flex-direction: column;
   box-shadow: -4px 0 24px rgba(0,0,0,.12);
 }
+.bsd-drawer-wide { width: 640px; }
 .drawer-slide-enter-active, .drawer-slide-leave-active { transition: transform 0.25s; }
 .drawer-slide-enter-from, .drawer-slide-leave-to       { transform: translateX(100%); }
 
 .bsd-drawer-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 20px; border-bottom: 1px solid #edf2f7;
-  position: sticky; top: 0; background: #fff; z-index: 1;
+  flex-shrink: 0; background: #fff;
 }
 .bsd-drawer-close {
   background: none; border: none; cursor: pointer; font-size: 14px; color: #a0aec0; padding: 4px 6px;
@@ -1298,13 +1722,68 @@ export const SortIcon = {
 .bsd-drawer-close:hover  { color: #4a5568; }
 .bsd-drawer-loading      { display: flex; justify-content: center; padding: 40px; }
 
-.bsd-drawer-section      { padding: 14px 20px; border-bottom: 1px solid #f7f9fb; }
-.bsd-drawer-section-title {
-  font-size: 10px; font-weight: 700; color: #a0aec0;
-  text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px;
+/* ── drawer sub-tabs ── */
+.bsd-drawer-tabs {
+  display: flex; gap: 2px; padding: 0 20px;
+  border-bottom: 1px solid #edf2f7;
+  flex-shrink: 0; background: #fff;
+}
+.bsd-drawer-tab {
+  padding: 10px 16px; border: none; background: none;
+  font-size: 12px; font-weight: 500; color: #718096;
+  cursor: pointer; border-bottom: 2px solid transparent;
+  margin-bottom: -1px; display: flex; align-items: center; gap: 6px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.bsd-drawer-tab:hover  { color: #4a5568; }
+.bsd-drawer-tab.active { color: #5e64ff; border-bottom-color: #5e64ff; font-weight: 600; }
+.bsd-drawer-tab-badge {
+  background: #fff5f5; color: #c53030; border-radius: 10px;
+  font-size: 10px; font-weight: 700; padding: 1px 6px; min-width: 16px; text-align: center;
 }
 
-.bsd-drawer-stats  { display: flex; flex-direction: column; gap: 8px; }
+.bsd-drawer-body {
+  padding: 16px 20px; display: flex; flex-direction: column; gap: 14px;
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+}
+/* cards have overflow:hidden, which lets flex shrink them to fit instead of
+   overflowing the body — force full height so the body scrolls */
+.bsd-drawer-body > * { flex-shrink: 0; }
+
+/* ── drawer cards ── */
+.bsd-drawer-card {
+  border: 1px solid #e8edf2; border-radius: 10px; overflow: hidden; background: #fff;
+}
+.bsd-drawer-card-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; background: #f8fafc; border-bottom: 1px solid #edf2f7;
+}
+.bsd-drawer-card-title {
+  font-size: 11px; font-weight: 700; color: #4a5568;
+  text-transform: uppercase; letter-spacing: 0.04em; flex: 1;
+}
+.bsd-drawer-card-icon {
+  width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+}
+.bsd-drawer-card-icon.punch    { background: #eff6ff; color: #3b82f6; }
+.bsd-drawer-card-icon.created  { background: #f0fdf4; color: #16a34a; }
+.bsd-drawer-card-icon.unmapped { background: #fffbeb; color: #d97706; }
+.bsd-drawer-card-icon.api-err  { background: #fef2f2; color: #dc2626; }
+.bsd-drawer-card-icon.info     { background: #eef2ff; color: #5e64ff; }
+
+.bsd-accordion-toggle {
+  background: none; border: none; cursor: pointer; font-size: 11px;
+  color: #5e64ff; font-weight: 600; padding: 2px 4px; flex-shrink: 0;
+}
+.bsd-accordion-toggle:hover { text-decoration: underline; }
+
+.bsd-drawer-empty {
+  padding: 24px 14px; text-align: center; color: #a0aec0; font-size: 12px;
+}
+
+.bsd-drawer-stats  { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; }
 .bsd-stat-row      { display: flex; align-items: baseline; gap: 8px; }
 .bsd-stat-label    { flex: 1; font-size: 12px; color: #718096; }
 .bsd-stat-value    { font-size: 16px; font-weight: 700; }
@@ -1314,18 +1793,29 @@ export const SortIcon = {
 .bsd-stat-value.muted  { color: #718096; }
 .bsd-stat-unit     { font-size: 10px; color: #a0aec0; }
 
-.bsd-drawer-meta   { display: flex; flex-direction: column; gap: 6px; }
+.bsd-drawer-meta   { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; }
 .bsd-meta-row      { display: flex; justify-content: space-between; align-items: center; }
 .bsd-meta-row span:first-child { color: #718096; font-size: 11px; }
 .bsd-meta-row span:last-child, .bsd-meta-row a { font-weight: 500; font-size: 12px; color: #2d3748; }
 .bsd-meta-row a    { color: #5e64ff; text-decoration: none; }
 .bsd-meta-row a:hover { text-decoration: underline; }
 
-.bsd-tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.bsd-tag-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 14px; }
 .bsd-tag      { background: #edf2f7; color: #4a5568; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
 .bsd-tag-err  { background: #fff5f5; color: #c53030; }
+.bsd-tag-in   { background: #f0fdf4; color: #16a34a; }
+.bsd-tag-out  { background: #eff6ff; color: #3b82f6; }
+.bsd-tag-mappable { display: inline-flex; align-items: center; gap: 6px; background: #fffbeb; color: #92400e; }
+.bsd-tag-map-btn {
+  background: #fff; border: 1px solid #f6ad55; color: #c05621; border-radius: 4px;
+  font-size: 9px; font-weight: 700; padding: 1px 6px; cursor: pointer;
+}
+.bsd-tag-map-btn:hover { background: #f6ad55; color: #fff; }
 
-.bsd-drawer-actions { padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+.bsd-drawer-actions {
+  padding: 12px 20px; display: flex; flex-direction: column; gap: 8px;
+  border-top: 1px solid #edf2f7; background: #fff; flex-shrink: 0;
+}
 .bsd-btn-primary {
   background: #5e64ff; color: #fff; border: none; border-radius: 6px;
   padding: 8px 16px; cursor: pointer; font-size: 12px; font-weight: 600; text-align: center;
@@ -1340,4 +1830,52 @@ export const SortIcon = {
 .bsd-drawer-actions .bsd-btn-ghost {
   display: block; text-align: center; text-decoration: none; padding: 7px 16px;
 }
+
+/* ── employee search modal ── */
+.bsd-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 1100;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.15s; }
+.modal-fade-enter-from, .modal-fade-leave-to       { opacity: 0; }
+.bsd-modal {
+  width: 460px; max-width: 92vw; max-height: 80vh; background: #fff;
+  border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,.18);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.bsd-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid #edf2f7; font-size: 13px;
+}
+.bsd-modal-body { padding: 14px 18px; overflow-y: auto; }
+.bsd-modal-search {
+  width: 100%; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 8px 12px; font-size: 13px; margin-bottom: 10px; box-sizing: border-box;
+}
+.bsd-modal-search:focus { outline: none; border-color: #5e64ff; box-shadow: 0 0 0 2px rgba(94,100,255,.15); }
+.bsd-modal-results { display: flex; flex-direction: column; gap: 4px; }
+.bsd-modal-result-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer; transition: background 0.1s;
+}
+.bsd-modal-result-row:hover { background: #f7fafc; }
+.bsd-modal-result-main { display: flex; flex-direction: column; }
+.bsd-modal-result-name { font-size: 12px; font-weight: 600; color: #2d3748; }
+.bsd-modal-result-id   { font-size: 10px; color: #a0aec0; }
+.bsd-modal-result-meta { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #718096; }
+
+/* ── employee view tab ── */
+.bsd-emp-picker {
+  border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px;
+  font-size: 12px; background: #fff; width: 100%; height: 32px; text-align: left; cursor: pointer;
+}
+.bsd-emp-picker:hover { border-color: #cbd5e0; }
+.bsd-emp-header-card {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; margin-bottom: 16px;
+}
+.bsd-emp-header-name { font-size: 15px; font-weight: 700; color: #1a202c; }
+.bsd-emp-header-id   { font-size: 11px; color: #a0aec0; }
+.bsd-emp-header-device { display: flex; align-items: center; gap: 8px; }
+.bsd-row-warning td { background: #fffaf0; }
 </style>

@@ -634,19 +634,8 @@ def process_device_logs_etime(response_text, serial_no=None):
 				skipped_inactive.append(emp_code)
 				continue
 
-			last_time = unique_times[-1]
-			in_inserted = False
-
 			for log_time in unique_times:
 				try:
-					log_type = "OUT" if log_time == last_time else "IN"
-
-					# Don't attempt OUT if IN was never confirmed — avoids
-					# "Cannot log OUT without logging IN first" validation errors
-					if log_type == "OUT" and not in_inserted:
-						skipped_duplicate += 1
-						continue
-
 					if not frappe.db.exists(
 						"Employee Checkin", {"employee": employee, "time": log_time}
 					):
@@ -656,16 +645,12 @@ def process_device_logs_etime(response_text, serial_no=None):
 								"employee": employee,
 								"time": log_time,
 								"device_id": device_id_label,
-								"log_type": log_type,
+								"log_type": "IN",
 							}
 						).insert(ignore_permissions=True)
 						created += 1
-						if log_type == "IN":
-							in_inserted = True
 					else:
 						skipped_duplicate += 1
-						if log_type == "IN":
-							in_inserted = True
 
 				except Exception:
 					errored_employees.append(emp_code)
