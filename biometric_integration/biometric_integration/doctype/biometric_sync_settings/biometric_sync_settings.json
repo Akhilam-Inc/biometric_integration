@@ -11,7 +11,9 @@
   "column_break_bvjr",
   "endpoint_url",
   "biometric_location_detail",
-  "biometric_serial_detail"
+  "biometric_serial_detail",
+  "biometric_zkteco_device",
+  "zkteco_auth_token"
  ],
  "fields": [
   {
@@ -19,7 +21,7 @@
    "fieldname": "server_type",
    "fieldtype": "Select",
    "label": "Server Type",
-   "options": "Bio Server\neTime Tracker Lite",
+   "options": "Bio Server\neTime Tracker Lite\nZKTeco",
    "reqd": 1
   },
   {
@@ -60,6 +62,20 @@
    "fieldtype": "Table",
    "label": "Biometric Serial Detail",
    "options": "Biometric Serial Detail"
+  },
+  {
+   "depends_on": "eval:doc.server_type == \"ZKTeco\"",
+   "fieldname": "zkteco_auth_token",
+   "fieldtype": "Password",
+   "label": "ZKTeco Auth Token",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.server_type == \"ZKTeco\"",
+   "fieldname": "biometric_zkteco_device",
+   "fieldtype": "Table",
+   "label": "Biometric ZKTeco Device",
+   "options": "Biometric ZKTeco Device"
   }
  ],
  "index_web_pages_for_search": 1,

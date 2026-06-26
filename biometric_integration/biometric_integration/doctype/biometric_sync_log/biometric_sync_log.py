@@ -187,7 +187,7 @@ def sync_all():
 			if queued:
 				update_biometric_sync_settings(row.location, getdate(today()))
 
-	else:  # eTime Tracker Lite
+	elif settings.server_type == "eTime Tracker Lite":
 		for row in settings.biometric_serial_detail:
 			if not row.serial_no or not row.last_sync_datetime:
 				continue
@@ -218,9 +218,36 @@ def sync_all():
 			if queued:
 				update_etime_sync_settings(row.serial_no, frappe.utils.now_datetime())
 
+	elif settings.server_type == "ZKTeco":
+		for row in settings.biometric_zkteco_device:
+			if not row.terminal_sn or not row.last_sync_datetime:
+				continue
+
+			current = getdate(row.last_sync_datetime)
+			if current > yesterday:
+				continue
+
+			queued = 0
+			while current <= yesterday:
+				frappe.enqueue(
+					method=run_sync_job,
+					serial_no=row.terminal_sn,
+					sync_date=str(current),
+					is_missing_date=True,
+					queue="short",
+					timeout=3500,
+					is_async=True,
+					enqueue_after_commit=True,
+				)
+				current = add_days(current, 1)
+				queued += 1
+
+			if queued:
+				update_zkteco_sync_settings(row.terminal_sn, frappe.utils.now_datetime())
+
 
 # ---------------------------------------------------------------------------
-# Universal sync job (Bio Server + eTime Tracker Lite)
+# Universal sync job (Bio Server + eTime Tracker Lite + ZKTeco)
 # ---------------------------------------------------------------------------
 
 @frappe.whitelist()
@@ -242,6 +269,7 @@ def run_sync_job_background(
 				title="Last Sync Date Required",
 			)
 	else:
+		# eTime Tracker Lite and ZKTeco both use serial_no + last_sync_datetime
 		if not serial_no:
 			frappe.throw("Serial No is required.", title="Serial No Required")
 		if not last_sync_datetime:
@@ -271,12 +299,25 @@ def run_sync_job(
 	is_missing_date=False,
 ):
 	"""
-	Universal background job — handles both Bio Server and eTime Tracker Lite.
+	Universal background job — Bio Server, eTime Tracker Lite, and ZKTeco.
 
-	Bio Server:    location + sync_date
-	eTime regular: serial_no + last_sync_datetime  (to_datetime = now)
-	eTime missing: serial_no + sync_date           (from = date 00:00, to = date 23:59:59)
+	Bio Server:     location + sync_date
+	eTime regular:  serial_no + last_sync_datetime  (to_datetime = now)
+	eTime missing:  serial_no + sync_date           (from = date 00:00, to = date 23:59:59)
+	ZKTeco regular: serial_no + last_sync_datetime  (to_datetime = now)
+	ZKTeco missing: serial_no + sync_date           (from = date 00:00, to = date 23:59:59)
 	"""
+	settings = frappe.get_single("Biometric Sync Settings")
+	server_type = settings.server_type
+
+	if server_type == "ZKTeco":
+		return _run_zkteco_sync_job(
+			terminal_sn=serial_no,
+			sync_date=sync_date,
+			last_sync_datetime=last_sync_datetime,
+			is_missing_date=is_missing_date,
+		)
+
 	client = BiometricApiClient()
 
 	# For eTime missing-date syncs: derive the exact datetime window from sync_date
@@ -318,11 +359,61 @@ def run_sync_job(
 	)
 
 
-def _process_response(server_type, response_text, serial_no=None):
-	"""Dispatch to the mode-specific parser. Both return the same stats dict."""
+def _run_zkteco_sync_job(
+	terminal_sn: str,
+	sync_date=None,
+	last_sync_datetime=None,
+	is_missing_date: bool = False,
+):
+	"""ZKTeco-specific background job body (REST/JWT, paginated)."""
+	from biometric_integration.biometric_integration.api.base import ZKTecoApiClient
+
+	if is_missing_date and sync_date:
+		start_dt = f"{sync_date} 00:00:00"
+		end_dt = f"{sync_date} 23:59:59"
+		effective_from_dt = start_dt
+	else:
+		start_dt = str(last_sync_datetime)
+		end_dt = str(frappe.utils.now_datetime())
+		effective_from_dt = start_dt
+
+	try:
+		client = ZKTecoApiClient()
+		transactions = client.get_transactions(start_dt, end_dt, terminal_sn=terminal_sn)
+	except Exception:
+		# get_transactions already logged via create_biometric_log — just return
+		return
+
+	stats = process_device_logs_zkteco(transactions, terminal_sn=terminal_sn)
+
+	if not is_missing_date:
+		update_zkteco_sync_settings(terminal_sn, frappe.utils.now_datetime())
+
+	_write_sync_log(
+		server_type="ZKTeco",
+		location=None,
+		serial_no=terminal_sn,
+		sync_date=sync_date,
+		last_sync_datetime=effective_from_dt,
+		is_missing_date=is_missing_date,
+		stats=stats,
+	)
+
+
+def _process_response(server_type, response_data, serial_no=None):
+	"""Dispatch to the mode-specific parser. All return the same stats dict."""
 	if server_type == "Bio Server":
-		return process_device_logs(response_text)
-	return process_device_logs_etime(response_text, serial_no=serial_no)
+		return process_device_logs(response_data)
+	if server_type == "eTime Tracker Lite":
+		return process_device_logs_etime(response_data, serial_no=serial_no)
+	# ZKTeco — response_data may be a list (fresh sync) or a JSON string (retry from stored log)
+	if isinstance(response_data, str):
+		try:
+			response_data = json.loads(response_data)
+		except Exception:
+			frappe.log_error(title="ZKTeco: response_data parse error", message=response_data[:500])
+			return dict(_EMPTY_STATS)
+	return process_device_logs_zkteco(response_data, terminal_sn=serial_no)
 
 
 # ---------------------------------------------------------------------------
@@ -364,6 +455,25 @@ def update_etime_sync_settings(serial_no, last_sync_datetime):
 		)
 		frappe.publish_realtime(
 			"biometric_sync_update", {"serial_no": serial_no, "status": "success"}
+		)
+
+
+def update_zkteco_sync_settings(terminal_sn, last_sync_datetime):
+	row = frappe.db.get_value(
+		"Biometric ZKTeco Device",
+		{"parent": "Biometric Sync Settings", "terminal_sn": terminal_sn},
+		"name",
+	)
+	if row:
+		frappe.db.set_value(
+			"Biometric ZKTeco Device",
+			row,
+			"last_sync_datetime",
+			last_sync_datetime,
+			update_modified=False,
+		)
+		frappe.publish_realtime(
+			"biometric_sync_update", {"serial_no": terminal_sn, "status": "success"}
 		)
 
 
@@ -679,6 +789,119 @@ def process_device_logs_etime(response_text, serial_no=None):
 		"bad_lines": bad_lines,
 		"total_records_received": total_records_received,
 		# eTime: unique employees attempted (not raw lines — they are N punches per employee)
+		"employees_total": len(logs_by_emp),
+	}
+
+
+# ---------------------------------------------------------------------------
+# ZKTeco response processor
+# ---------------------------------------------------------------------------
+
+def process_device_logs_zkteco(transactions: list, terminal_sn: str | None = None) -> dict:
+	"""
+	Process a flat list of ZKTeco transaction dicts (already parsed JSON) and
+	create Employee Checkins.
+
+	terminal_sn is passed as a query param to the API, but we also filter in-app
+	as a safety net in case the API returns stray records.
+	Maps emp_code → attendance_device_id → Employee.
+	Returns the same stats dict shape as the other processors.
+	"""
+	if not transactions:
+		return dict(_EMPTY_STATS)
+
+	device_id_label = terminal_sn or "ZKTeco"
+
+	# Safety-net filter — the API already filters by terminal_sn, but guard against stray records.
+	if terminal_sn:
+		transactions = [t for t in transactions if t.get("terminal_sn") == terminal_sn]
+
+	total_records_received = len(transactions)
+
+	# Batch-fetch all emp_codes present in this result to avoid N+1 DB calls.
+	emp_codes = list({t.get("emp_code", "") for t in transactions if t.get("emp_code")})
+	employees_by_code: dict = {}
+	if emp_codes:
+		rows = frappe.get_all(
+			"Employee",
+			filters={"attendance_device_id": ["in", emp_codes]},
+			fields=["name", "attendance_device_id", "status"],
+		)
+		for r in rows:
+			employees_by_code[r.attendance_device_id] = r
+
+	# Group punches by employee so we can commit per-employee (same pattern as eTime).
+	logs_by_emp: dict = {}
+	for record in transactions:
+		emp_code = record.get("emp_code", "")
+		punch_time_str = record.get("punch_time", "")
+		if emp_code and punch_time_str:
+			logs_by_emp.setdefault(emp_code, []).append(punch_time_str)
+
+	created = 0
+	skipped_duplicate = 0
+	skipped_no_employee: list = []
+	skipped_inactive: list = []
+	errored_employees: list = []
+
+	for emp_code, punch_time_strs in logs_by_emp.items():
+		try:
+			emp = employees_by_code.get(emp_code)
+			if not emp:
+				skipped_no_employee.append(emp_code)
+				continue
+
+			if emp.status != "Active":
+				skipped_inactive.append(emp_code)
+				continue
+
+			for punch_time_str in punch_time_strs:
+				try:
+					punch_time = get_datetime(punch_time_str)
+
+					if frappe.db.exists(
+						"Employee Checkin", {"employee": emp.name, "time": punch_time}
+					):
+						skipped_duplicate += 1
+						continue
+
+					frappe.get_doc(
+						{
+							"doctype": "Employee Checkin",
+							"employee": emp.name,
+							"time": punch_time,
+							"device_id": device_id_label,
+							"log_type": "IN",
+						}
+					).insert(ignore_permissions=True)
+					created += 1
+
+				except Exception:
+					errored_employees.append(emp_code)
+					frappe.log_error(
+						title="ZKTeco: Checkin insert error",
+						message=f"Emp: {emp_code} at {punch_time_str}\n{frappe.get_traceback()}",
+					)
+					frappe.db.rollback()
+
+			frappe.db.commit()
+
+		except Exception:
+			frappe.db.rollback()
+			errored_employees.append(emp_code)
+			frappe.log_error(
+				title="ZKTeco: Employee group error",
+				message=f"Emp Code: {emp_code}\n{frappe.get_traceback()}",
+			)
+
+	return {
+		"created": created,
+		"skipped_duplicate": skipped_duplicate,
+		"skipped_no_employee": list(set(skipped_no_employee)),
+		"skipped_inactive": list(set(skipped_inactive)),
+		"errored_employees": list(set(errored_employees)),
+		"bad_lines": 0,
+		"total_records_received": total_records_received,
 		"employees_total": len(logs_by_emp),
 	}
 

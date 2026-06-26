@@ -16,7 +16,7 @@ from biometric_integration.biometric_integration.doctype.biometric_sync_log.biom
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-_UNIT_COL = {"Bio Server": "location", "eTime Tracker Lite": "serial_no"}
+_UNIT_COL = {"Bio Server": "location", "eTime Tracker Lite": "serial_no", "ZKTeco": "serial_no"}
 
 
 def _settings():
@@ -26,6 +26,8 @@ def _settings():
 	unit_col = _UNIT_COL.get(server_type, "location")
 	if server_type == "Bio Server":
 		all_units = [r.location for r in s.biometric_location_detail if r.location]
+	elif server_type == "ZKTeco":
+		all_units = [r.terminal_sn for r in s.biometric_zkteco_device if r.terminal_sn]
 	else:
 		all_units = [r.serial_no for r in s.biometric_serial_detail if r.serial_no]
 	return s, server_type, unit_col, all_units

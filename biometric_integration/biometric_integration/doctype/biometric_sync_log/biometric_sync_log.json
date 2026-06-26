@@ -100,7 +100,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Server Type",
-   "options": "\nBio Server\neTime Tracker Lite",
+   "options": "\nBio Server\neTime Tracker Lite\nZKTeco",
    "read_only": 1
   },
   {
@@ -152,7 +152,7 @@
    "fieldname": "employees_total",
    "fieldtype": "Int",
    "label": "Employees / Records Total",
-   "description": "Bio Server: equals total_records_received. eTime: unique employees in response.",
+   "description": "Bio Server: equals total_records_received. eTime/ZKTeco: unique employees in response.",
    "read_only": 1
   },
   {

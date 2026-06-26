@@ -6,6 +6,14 @@ import frappe
 import requests
 from frappe.utils import get_datetime
 
+_ZKTECO_ACCESS_KEY = "zkteco_access_token"
+_ZKTECO_REFRESH_KEY = "zkteco_refresh_token"
+# Cache TTLs — access token lives 5 min on the server; we evict at 4 min to
+# avoid using a token that expires mid-request.  Refresh lives 24 h; we
+# evict at ~23.6 h for the same reason.
+_ACCESS_TTL = 240
+_REFRESH_TTL = 85000
+
 
 class SupportedHTTPMethod(Enum):
 	GET = "GET"
@@ -253,3 +261,194 @@ class BiometricApiClient:
 		xml = xml_decl + body
 		xml = xml.replace("﻿", "")
 		return xml
+
+
+class ZKTecoApiClient:
+	"""
+	REST/JSON API client for ZKTeco BioTime server.
+
+	Auth: JWT tokens via /jwt-api-token-auth/ (access=5 min, refresh=24 h).
+	Tokens are cached in Redis (frappe.cache) so background jobs share them
+	and avoid redundant auth calls.  The fetch loop re-requests a token per
+	page so an expiry mid-pagination is handled transparently.
+	"""
+
+	def __init__(self) -> None:
+		self.settings = frappe.get_single("Biometric Sync Settings")
+		self.base_url = self.settings.endpoint_url.rstrip("/")
+		self.username = self.settings.api_user
+		self.password = self.settings.get_password("api_password")
+
+	# ------------------------------------------------------------------
+	# Token management
+	# ------------------------------------------------------------------
+
+	def _get_access_token(self) -> str:
+		"""Return a valid access token: Redis cache → settings field → refresh → full re-auth."""
+		token = frappe.cache().get_value(_ZKTECO_ACCESS_KEY)
+		if token:
+			return token
+
+		# Warm cache from the token saved on the settings doc (survives worker restarts).
+		stored = self.settings.get_password("zkteco_auth_token")
+		if stored:
+			frappe.cache().set_value(_ZKTECO_ACCESS_KEY, stored, expires_in_sec=_ACCESS_TTL)
+			return stored
+
+		refresh = frappe.cache().get_value(_ZKTECO_REFRESH_KEY)
+		if refresh:
+			return self._do_refresh(refresh)
+
+		return self._do_auth()
+
+	def _do_auth(self) -> str:
+		"""Full credential auth.  Caches both access and refresh tokens."""
+		response = requests.post(
+			f"{self.base_url}/jwt-api-token-auth/",
+			json={"username": self.username, "password": self.password},
+			timeout=30,
+		)
+		response.raise_for_status()
+		data = response.json()
+
+		access = data["access"]
+		refresh = data.get("refresh", "")
+
+		frappe.cache().set_value(_ZKTECO_ACCESS_KEY, access, expires_in_sec=_ACCESS_TTL)
+		if refresh:
+			frappe.cache().set_value(_ZKTECO_REFRESH_KEY, refresh, expires_in_sec=_REFRESH_TTL)
+
+		self._persist_token(access)
+		return access
+
+	def _do_refresh(self, refresh_token: str) -> str:
+		"""Exchange a refresh token for a new access token."""
+		try:
+			response = requests.post(
+				f"{self.base_url}/jwt-api-token-refresh/",
+				json={"refresh": refresh_token},
+				timeout=30,
+			)
+			response.raise_for_status()
+			access = response.json()["access"]
+			frappe.cache().set_value(_ZKTECO_ACCESS_KEY, access, expires_in_sec=_ACCESS_TTL)
+			self._persist_token(access)
+			return access
+		except Exception:
+			# Refresh token may have expired — fall back to full re-auth
+			frappe.cache().delete_value(_ZKTECO_REFRESH_KEY)
+			return self._do_auth()
+
+	def _persist_token(self, access: str) -> None:
+		"""Write the latest access token back to Biometric Sync Settings so it
+		survives worker restarts and Redis flushes."""
+		frappe.db.set_value(
+			"Biometric Sync Settings",
+			"Biometric Sync Settings",
+			"zkteco_auth_token",
+			access,
+			update_modified=False,
+		)
+		frappe.db.commit()
+
+	def _auth_header(self) -> dict:
+		return {"Authorization": f"JWT {self._get_access_token()}"}
+
+	# ------------------------------------------------------------------
+	# Transactions
+	# ------------------------------------------------------------------
+
+	def get_transactions(
+		self,
+		start_dt: str,
+		end_dt: str,
+		terminal_sn: str | None = None,
+		page_size: int = 1000,
+	) -> list:
+		"""
+		Fetch all attendance transactions in the given datetime window.
+
+		Paginates through every page (following `next` until null).
+		Re-acquires a token per page so a 5-min expiry mid-loop is handled
+		transparently via the Redis cache layer.
+
+		On a 401 response the cached access token is cleared and the request
+		is retried once with a freshly issued token.
+
+		Args:
+			start_dt:    ISO-like string "YYYY-MM-DD HH:MM:SS"
+			end_dt:      ISO-like string "YYYY-MM-DD HH:MM:SS"
+			terminal_sn: device serial number to filter by (optional)
+			page_size:   records per page (default 1000, max tested = 1000)
+
+		Returns:
+			Flat list of transaction dicts from the API.
+		"""
+		from biometric_integration.biometric_integration.api.utils import create_biometric_log
+
+		initial_params = {
+			"start_time": start_dt,
+			"end_time": end_dt,
+			"page_size": page_size,
+			"page": 1,
+		}
+		if terminal_sn:
+			initial_params["terminal_sn"] = terminal_sn
+
+		log = create_biometric_log(
+			method="ZKTecoApiClient.get_transactions",
+			request_data=initial_params,
+			make_new=True,
+		)
+		frappe.flags.request_id = log.name
+
+		all_records: list = []
+		pages_fetched = 0
+		# First page uses constructed params; subsequent pages follow the `next` URL
+		# returned by the API so we never drift out of sync with server-side pagination.
+		next_url: str | None = f"{self.base_url}/iclock/api/transactions/"
+		next_params: dict | None = initial_params
+
+		try:
+			while next_url:
+				response = self._request_with_retry(next_url, next_params)
+				data = response.json()
+
+				records = data.get("data") or []
+				all_records.extend(records)
+				pages_fetched += 1
+
+				# Follow the server-provided `next` URL directly; no manual page math.
+				next_url = data.get("next")
+				next_params = None  # next URL already contains all query params
+
+			# Store the full transaction list so retry_checkin_creation can re-process
+			# without hitting the device again (same pattern as SOAP response storage).
+			create_biometric_log(
+				message=f"Fetched {len(all_records)} transactions ({pages_fetched} page(s))",
+				response_data=all_records,
+				status="Success",
+			)
+			return all_records
+
+		except Exception as e:
+			create_biometric_log(
+				message="ZKTeco Transaction Fetch Error",
+				exception=e,
+				status="Error",
+			)
+			frappe.flags.request_id = None
+			frappe.log_error(title="ZKTeco API Error", message=frappe.get_traceback())
+			raise
+
+	def _request_with_retry(self, url: str, params: dict | None = None) -> requests.Response:
+		"""GET a transactions URL with one automatic retry on 401."""
+		response = requests.get(url, headers=self._auth_header(), params=params, timeout=60)
+
+		if response.status_code == 401:
+			# Access token expired between cache write and this request — clear and retry once
+			frappe.cache().delete_value(_ZKTECO_ACCESS_KEY)
+			response = requests.get(url, headers=self._auth_header(), params=params, timeout=60)
+
+		response.raise_for_status()
+		return response

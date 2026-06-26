@@ -1,0 +1,50 @@
+{
+ "actions": [],
+ "creation": "2026-06-26 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "terminal_sn",
+  "last_sync_datetime",
+  "sync_log"
+ ],
+ "fields": [
+  {
+   "fieldname": "terminal_sn",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Terminal Serial No",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "last_sync_datetime",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Last Sync Datetime",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "sync_log",
+   "fieldtype": "Button",
+   "in_list_view": 1,
+   "label": "Sync Log"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-26 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Biometric Integration",
+ "name": "Biometric ZKTeco Device",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
