@@ -797,6 +797,20 @@ def process_device_logs_etime(response_text, serial_no=None):
 # ZKTeco response processor
 # ---------------------------------------------------------------------------
 
+def _get_zkteco_machine_type(terminal_sn: str | None) -> str:
+	"""Look up the configured Machine Type (IN/OUT) for a ZKTeco terminal, default IN."""
+	if not terminal_sn:
+		return "IN"
+	return (
+		frappe.db.get_value(
+			"Biometric ZKTeco Device",
+			{"parent": "Biometric Sync Settings", "terminal_sn": terminal_sn},
+			"machine_type",
+		)
+		or "IN"
+	)
+
+
 def process_device_logs_zkteco(transactions: list, terminal_sn: str | None = None) -> dict:
 	"""
 	Process a flat list of ZKTeco transaction dicts (already parsed JSON) and
@@ -811,6 +825,7 @@ def process_device_logs_zkteco(transactions: list, terminal_sn: str | None = Non
 		return dict(_EMPTY_STATS)
 
 	device_id_label = terminal_sn or "ZKTeco"
+	log_type = _get_zkteco_machine_type(terminal_sn)
 
 	# Safety-net filter — the API already filters by terminal_sn, but guard against stray records.
 	if terminal_sn:
@@ -871,7 +886,7 @@ def process_device_logs_zkteco(transactions: list, terminal_sn: str | None = Non
 							"employee": emp.name,
 							"time": punch_time,
 							"device_id": device_id_label,
-							"log_type": "IN",
+							"log_type": log_type,
 						}
 					).insert(ignore_permissions=True)
 					created += 1

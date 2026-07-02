@@ -6,6 +6,7 @@
  "engine": "InnoDB",
  "field_order": [
   "terminal_sn",
+  "machine_type",
   "last_sync_datetime",
   "sync_log"
  ],
@@ -17,6 +18,15 @@
    "label": "Terminal Serial No",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "default": "IN",
+   "fieldname": "machine_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Machine Type",
+   "options": "IN\nOUT",
+   "reqd": 1
   },
   {
    "fieldname": "last_sync_datetime",
