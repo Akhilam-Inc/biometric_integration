@@ -333,6 +333,7 @@ def run_sync_job(
 		serial_no=serial_no,
 		last_sync_datetime=etime_from_dt,
 		to_datetime=etime_to_dt,
+		is_missing_date=is_missing_date,
 	)
 
 	if result["status"] != "success":
@@ -372,14 +373,29 @@ def _run_zkteco_sync_job(
 		start_dt = f"{sync_date} 00:00:00"
 		end_dt = f"{sync_date} 23:59:59"
 		effective_from_dt = start_dt
-	else:
+	elif last_sync_datetime:
 		start_dt = str(last_sync_datetime)
 		end_dt = str(frappe.utils.now_datetime())
 		effective_from_dt = start_dt
+	else:
+		# Neither a missing-date window nor a last-sync pointer to resume from —
+		# happens if a Retry is triggered from a log whose identity fields never
+		# got captured. Bail loudly instead of sending start_time="None" to the API.
+		frappe.log_error(
+			title="ZKTeco Sync Skipped",
+			message=f"terminal_sn={terminal_sn}: no sync_date or last_sync_datetime to sync from.",
+		)
+		return
 
 	try:
 		client = ZKTecoApiClient()
-		transactions = client.get_transactions(start_dt, end_dt, terminal_sn=terminal_sn)
+		transactions = client.get_transactions(
+			start_dt,
+			end_dt,
+			terminal_sn=terminal_sn,
+			sync_date=sync_date,
+			is_missing_date=is_missing_date,
+		)
 	except Exception:
 		# get_transactions already logged via create_biometric_log — just return
 		return

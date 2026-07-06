@@ -24,6 +24,17 @@ WEB_URI_BIO_SERVER = "/iclock/webservice.asmx"
 WEB_URI_ETRACKER_LITE = "/iclock/WebAPIService.asmx"
 
 
+def _stamp_log_identity(log_name: str, **fields) -> None:
+	"""Write the request's identity fields onto a just-created log record.
+
+	Done immediately at creation — before the HTTP call — so an Error log keeps
+	the exact parameters it was invoked with. Without this, only the success
+	path (_write_sync_log) stamped these fields, so a failed request left them
+	blank and "Retry" would reconstruct the job from empty values.
+	"""
+	frappe.db.set_value("Biometric Sync Log", log_name, fields, update_modified=False)
+
+
 class BiometricApiClient:
 	"""
 	SOAP API client for biometric device logs.
@@ -54,6 +65,7 @@ class BiometricApiClient:
 		serial_no=None,
 		last_sync_datetime=None,
 		to_datetime=None,
+		is_missing_date=False,
 	):
 		from biometric_integration.biometric_integration.api.utils import create_biometric_log
 
@@ -77,6 +89,13 @@ class BiometricApiClient:
 					method=self.get_device_logs.__name__, request_data=body, make_new=True
 				)
 				frappe.flags.request_id = log.name
+				_stamp_log_identity(
+					log.name,
+					server_type="Bio Server",
+					location=location,
+					sync_date=sync_date,
+					is_missing_date_sync=1 if is_missing_date else 0,
+				)
 
 				response = requests.post(
 					self.base_url,
@@ -134,6 +153,14 @@ class BiometricApiClient:
 					method=self.get_device_logs.__name__, request_data=body, make_new=True
 				)
 				frappe.flags.request_id = log.name
+				_stamp_log_identity(
+					log.name,
+					server_type="eTime Tracker Lite",
+					serial_no=serial_no,
+					sync_date=sync_date,
+					last_sync_datetime=last_sync_datetime,
+					is_missing_date_sync=1 if is_missing_date else 0,
+				)
 
 				response = requests.post(
 					self.base_url,
@@ -300,7 +327,9 @@ class ZKTecoApiClient:
 				return token
 
 			# Warm cache from the token saved on the settings doc (survives worker restarts).
-			stored = self.settings.get_password("zkteco_auth_token")
+			# raise_exception=False: the field has no __Auth row at all until the first
+			# successful auth, and get_password() throws rather than returning None for that.
+			stored = self.settings.get_password("zkteco_auth_token", raise_exception=False)
 			if stored:
 				frappe.cache().set_value(_ZKTECO_ACCESS_KEY, stored, expires_in_sec=_ACCESS_TTL)
 				return stored
@@ -308,7 +337,7 @@ class ZKTecoApiClient:
 		# Warm from the settings doc too, so a Redis flush doesn't force a full re-auth
 		# while the refresh token is still valid server-side (up to 24h).
 		refresh = frappe.cache().get_value(_ZKTECO_REFRESH_KEY) or self.settings.get_password(
-			"zkteco_refresh_token"
+			"zkteco_refresh_token", raise_exception=False
 		)
 		if refresh:
 			return self._do_refresh(refresh)
@@ -380,6 +409,8 @@ class ZKTecoApiClient:
 		end_dt: str,
 		terminal_sn: str | None = None,
 		page_size: int = 1000,
+		sync_date=None,
+		is_missing_date: bool = False,
 	) -> list:
 		"""
 		Fetch all attendance transactions in the given datetime window.
@@ -392,10 +423,13 @@ class ZKTecoApiClient:
 		is retried once with a freshly issued token.
 
 		Args:
-			start_dt:    ISO-like string "YYYY-MM-DD HH:MM:SS"
-			end_dt:      ISO-like string "YYYY-MM-DD HH:MM:SS"
-			terminal_sn: device serial number to filter by (optional)
-			page_size:   records per page (default 1000, max tested = 1000)
+			start_dt:        ISO-like string "YYYY-MM-DD HH:MM:SS"
+			end_dt:          ISO-like string "YYYY-MM-DD HH:MM:SS"
+			terminal_sn:     device serial number to filter by (optional)
+			page_size:       records per page (default 1000, max tested = 1000)
+			sync_date:       the calendar day this window belongs to, for missing-date jobs
+			                 (logged only — used to reconstruct the exact request on retry)
+			is_missing_date: whether this is a single-day backfill vs a regular catch-up sync
 
 		Returns:
 			Flat list of transaction dicts from the API.
@@ -417,6 +451,14 @@ class ZKTecoApiClient:
 			make_new=True,
 		)
 		frappe.flags.request_id = log.name
+		_stamp_log_identity(
+			log.name,
+			server_type="ZKTeco",
+			serial_no=terminal_sn or "",
+			sync_date=sync_date,
+			last_sync_datetime=start_dt,
+			is_missing_date_sync=1 if is_missing_date else 0,
+		)
 
 		all_records: list = []
 		pages_fetched = 0
