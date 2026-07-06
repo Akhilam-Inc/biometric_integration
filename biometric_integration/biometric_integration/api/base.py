@@ -268,9 +268,12 @@ class ZKTecoApiClient:
 	REST/JSON API client for ZKTeco BioTime server.
 
 	Auth: JWT tokens via /jwt-api-token-auth/ (access=5 min, refresh=24 h).
-	Tokens are cached in Redis (frappe.cache) so background jobs share them
-	and avoid redundant auth calls.  The fetch loop re-requests a token per
-	page so an expiry mid-pagination is handled transparently.
+	Tokens are cached in Redis (frappe.cache) and mirrored onto the Biometric
+	Sync Settings doc so background jobs share them and survive worker restarts
+	or a Redis flush.  The fetch loop re-requests a token per page so an expiry
+	mid-pagination is handled transparently.  On a 401, the access token is
+	force-refreshed (via the refresh token, falling back to full re-auth) and
+	the failed request is retried once with the new token.
 	"""
 
 	def __init__(self) -> None:
@@ -283,19 +286,30 @@ class ZKTecoApiClient:
 	# Token management
 	# ------------------------------------------------------------------
 
-	def _get_access_token(self) -> str:
-		"""Return a valid access token: Redis cache → settings field → refresh → full re-auth."""
-		token = frappe.cache().get_value(_ZKTECO_ACCESS_KEY)
-		if token:
-			return token
+	def _get_access_token(self, force_refresh: bool = False) -> str:
+		"""Return a valid access token: Redis cache → settings field → refresh → full re-auth.
 
-		# Warm cache from the token saved on the settings doc (survives worker restarts).
-		stored = self.settings.get_password("zkteco_auth_token")
-		if stored:
-			frappe.cache().set_value(_ZKTECO_ACCESS_KEY, stored, expires_in_sec=_ACCESS_TTL)
-			return stored
+		force_refresh=True skips the cached/stored access token entirely. This is used
+		after a 401 — re-reading the same stale value from Redis/the settings doc would
+		just reproduce the same failure, so we go straight to the refresh-token exchange
+		(falling back to full re-auth if that also fails).
+		"""
+		if not force_refresh:
+			token = frappe.cache().get_value(_ZKTECO_ACCESS_KEY)
+			if token:
+				return token
 
-		refresh = frappe.cache().get_value(_ZKTECO_REFRESH_KEY)
+			# Warm cache from the token saved on the settings doc (survives worker restarts).
+			stored = self.settings.get_password("zkteco_auth_token")
+			if stored:
+				frappe.cache().set_value(_ZKTECO_ACCESS_KEY, stored, expires_in_sec=_ACCESS_TTL)
+				return stored
+
+		# Warm from the settings doc too, so a Redis flush doesn't force a full re-auth
+		# while the refresh token is still valid server-side (up to 24h).
+		refresh = frappe.cache().get_value(_ZKTECO_REFRESH_KEY) or self.settings.get_password(
+			"zkteco_refresh_token"
+		)
 		if refresh:
 			return self._do_refresh(refresh)
 
@@ -318,7 +332,7 @@ class ZKTecoApiClient:
 		if refresh:
 			frappe.cache().set_value(_ZKTECO_REFRESH_KEY, refresh, expires_in_sec=_REFRESH_TTL)
 
-		self._persist_token(access)
+		self._persist_tokens(access, refresh)
 		return access
 
 	def _do_refresh(self, refresh_token: str) -> str:
@@ -332,27 +346,29 @@ class ZKTecoApiClient:
 			response.raise_for_status()
 			access = response.json()["access"]
 			frappe.cache().set_value(_ZKTECO_ACCESS_KEY, access, expires_in_sec=_ACCESS_TTL)
-			self._persist_token(access)
+			self._persist_tokens(access, refresh_token)
 			return access
 		except Exception:
 			# Refresh token may have expired — fall back to full re-auth
 			frappe.cache().delete_value(_ZKTECO_REFRESH_KEY)
 			return self._do_auth()
 
-	def _persist_token(self, access: str) -> None:
-		"""Write the latest access token back to Biometric Sync Settings so it
-		survives worker restarts and Redis flushes."""
+	def _persist_tokens(self, access: str, refresh: str = "") -> None:
+		"""Write the latest access/refresh tokens back to Biometric Sync Settings so
+		they survive worker restarts and Redis flushes."""
+		values = {"zkteco_auth_token": access}
+		if refresh:
+			values["zkteco_refresh_token"] = refresh
 		frappe.db.set_value(
 			"Biometric Sync Settings",
 			"Biometric Sync Settings",
-			"zkteco_auth_token",
-			access,
+			values,
 			update_modified=False,
 		)
 		frappe.db.commit()
 
-	def _auth_header(self) -> dict:
-		return {"Authorization": f"JWT {self._get_access_token()}"}
+	def _auth_header(self, force_refresh: bool = False) -> dict:
+		return {"Authorization": f"JWT {self._get_access_token(force_refresh=force_refresh)}"}
 
 	# ------------------------------------------------------------------
 	# Transactions
@@ -442,13 +458,20 @@ class ZKTecoApiClient:
 			raise
 
 	def _request_with_retry(self, url: str, params: dict | None = None) -> requests.Response:
-		"""GET a transactions URL with one automatic retry on 401."""
+		"""GET a transactions URL with one automatic retry on 401.
+
+		The retry forces a fresh token via refresh (or full re-auth) rather than
+		re-reading the cached/stored access token — that token is what just failed,
+		so re-reading it would reproduce the same 401 instead of recovering.
+		"""
 		response = requests.get(url, headers=self._auth_header(), params=params, timeout=60)
 
 		if response.status_code == 401:
-			# Access token expired between cache write and this request — clear and retry once
+			# Access token expired/invalid — clear it and force a real refresh before retrying
 			frappe.cache().delete_value(_ZKTECO_ACCESS_KEY)
-			response = requests.get(url, headers=self._auth_header(), params=params, timeout=60)
+			response = requests.get(
+				url, headers=self._auth_header(force_refresh=True), params=params, timeout=60
+			)
 
 		response.raise_for_status()
 		return response

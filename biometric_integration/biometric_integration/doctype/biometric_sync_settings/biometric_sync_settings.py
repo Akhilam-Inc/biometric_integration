@@ -92,6 +92,12 @@ class BiometricSyncSettings(Document):
 
 		self.zkteco_auth_token = access
 
+		refresh = data.get("refresh", "")
+		if refresh:
+			# Persisted (not just cached) so a Redis flush/worker restart can still
+			# refresh instead of forcing a full re-auth.
+			self.zkteco_refresh_token = refresh
+
 		# Also warm the Redis cache so the first sync doesn't need to re-auth.
 		from biometric_integration.biometric_integration.api.base import (
 			_ACCESS_TTL,
@@ -100,6 +106,5 @@ class BiometricSyncSettings(Document):
 			_ZKTECO_REFRESH_KEY,
 		)
 		frappe.cache().set_value(_ZKTECO_ACCESS_KEY, access, expires_in_sec=_ACCESS_TTL)
-		refresh = data.get("refresh", "")
 		if refresh:
 			frappe.cache().set_value(_ZKTECO_REFRESH_KEY, refresh, expires_in_sec=_REFRESH_TTL)

@@ -13,7 +13,8 @@
   "biometric_location_detail",
   "biometric_serial_detail",
   "biometric_zkteco_device",
-  "zkteco_auth_token"
+  "zkteco_auth_token",
+  "zkteco_refresh_token"
  ],
  "fields": [
   {
@@ -76,6 +77,13 @@
    "fieldtype": "Table",
    "label": "Biometric ZKTeco Device",
    "options": "Biometric ZKTeco Device"
+  },
+  {
+   "depends_on": "eval:doc.server_type == \"ZKTeco\"",
+   "fieldname": "zkteco_refresh_token",
+   "fieldtype": "Password",
+   "label": "ZKTeco Refresh Token",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
