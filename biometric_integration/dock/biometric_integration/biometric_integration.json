@@ -1,0 +1,23 @@
+{
+ "app": "biometric_integration",
+ "creation": "2026-10-19 14:01:35.619829",
+ "docstatus": 0,
+ "doctype": "Dock",
+ "idx": 0,
+ "items": [
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "fingerprint-pattern",
+   "link_to": "Biometric Integration",
+   "link_type": "Sidebar",
+   "title": "Biometric Integration"
+  }
+ ],
+ "modified": "2026-10-19 14:02:10.288437",
+ "modified_by": "Administrator",
+ "name": "biometric_integration",
+ "owner": "Administrator",
+ "standard": 1,
+ "user": ""
+}

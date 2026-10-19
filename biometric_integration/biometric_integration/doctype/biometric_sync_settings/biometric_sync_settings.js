@@ -68,3 +68,33 @@ frappe.ui.form.on("Biometric Serial Detail", {
 		});
 	},
 });
+
+frappe.ui.form.on("Biometric ZKTeco Device", {
+	sync_log: function (frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+
+		if (!row.terminal_sn) {
+			frappe.throw(__("Please enter a Terminal Serial No before syncing."));
+			return;
+		}
+		if (!row.last_sync_datetime) {
+			frappe.throw(__("Please set the Last Sync Datetime before syncing."));
+			return;
+		}
+
+		frappe.call({
+			method: "biometric_integration.biometric_integration.doctype.biometric_sync_log.biometric_sync_log.run_sync_job_background",
+			args: {
+				serial_no: row.terminal_sn,
+				last_sync_datetime: row.last_sync_datetime,
+			},
+			callback: function (r) {
+				if (!r.exc) {
+					frappe.msgprint(r.message || __("Enqueued successfully."));
+				} else {
+					frappe.msgprint(__("Unexpected server error."));
+				}
+			},
+		});
+	},
+});

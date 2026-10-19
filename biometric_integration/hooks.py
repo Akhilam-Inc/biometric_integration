@@ -14,9 +14,9 @@ app_license = "mit"
 add_to_apps_screen = [
 	{
 		"name": "biometric_integration",
-		"logo": "/assets/biometric_integration/logo.png",
+		"logo": "/assets/biometric_integration/biometric.png",
 		"title": "Biometric Integration",
-		"route": "/biometric_integration",
+		"route": "/desk/biometric-integration",
 	}
 ]
 

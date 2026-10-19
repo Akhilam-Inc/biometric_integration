@@ -16,7 +16,7 @@ from biometric_integration.biometric_integration.doctype.biometric_sync_log.biom
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-_UNIT_COL = {"Bio Server": "location", "eTime Tracker Lite": "serial_no"}
+_UNIT_COL = {"Bio Server": "location", "eTime Tracker Lite": "serial_no", "ZKTeco": "serial_no"}
 
 
 def _settings():
@@ -26,6 +26,8 @@ def _settings():
 	unit_col = _UNIT_COL.get(server_type, "location")
 	if server_type == "Bio Server":
 		all_units = [r.location for r in s.biometric_location_detail if r.location]
+	elif server_type == "ZKTeco":
+		all_units = [r.terminal_sn for r in s.biometric_zkteco_device if r.terminal_sn]
 	else:
 		all_units = [r.serial_no for r in s.biometric_serial_detail if r.serial_no]
 	return s, server_type, unit_col, all_units
@@ -44,10 +46,10 @@ def _row_status(log) -> str:
 	if status == "Error":
 		return "error"
 
-	total    = log.get("employees_total") or 0
-	created  = log.get("checkins_created") or 0
+	total = log.get("employees_total") or 0
+	created = log.get("checkins_created") or 0
 	unmapped = log.get("employees_not_found") or 0
-	errored  = log.get("errored_count") or 0
+	errored = log.get("errored_count") or 0
 
 	# Truly nothing came in and nothing was processed
 	if not total and not created and not unmapped and not errored:
@@ -62,7 +64,7 @@ def _fetch_logs(unit_col: str, server_type: str, sync_date: str):
 	dashboard without any post-query JSON parsing.
 	"""
 	return frappe.db.sql(
-		"""
+		f"""
 		SELECT
 			name,
 			sync_date,
@@ -83,7 +85,7 @@ def _fetch_logs(unit_col: str, server_type: str, sync_date: str):
 		WHERE sync_date = %(sync_date)s
 		  AND server_type = %(server_type)s
 		ORDER BY modified DESC
-		""".format(unit_col=unit_col),
+		""",
 		{"sync_date": sync_date, "server_type": server_type},
 		as_dict=True,
 	)
@@ -142,14 +144,14 @@ def get_dashboard_data(sync_date):
 	unit_set = set(all_units)
 
 	# KPI aggregates — all logs in the date for configured units
-	kpi_raw     = sum((r.total_records_received or 0) for r in logs if r.unit in unit_set)
-	kpi_total   = sum((r.employees_total or 0)        for r in logs if r.unit in unit_set)
-	kpi_created = sum((r.checkins_created or 0)        for r in logs if r.unit in unit_set)
-	kpi_skipped = sum((r.checkins_skipped or 0)        for r in logs if r.unit in unit_set)
-	kpi_unmapped = sum((r.employees_not_found or 0)    for r in logs if r.unit in unit_set)
-	kpi_errored  = sum((r.errored_count or 0)          for r in logs if r.unit in unit_set)
-	kpi_api_err  = sum(1 for r in logs if r.unit in unit_set and (r.status or "") == "Error")
-	healthy      = sum(1 for u in all_units if _row_status(latest.get(u)) == "success")
+	kpi_raw = sum((r.total_records_received or 0) for r in logs if r.unit in unit_set)
+	kpi_total = sum((r.employees_total or 0) for r in logs if r.unit in unit_set)
+	kpi_created = sum((r.checkins_created or 0) for r in logs if r.unit in unit_set)
+	kpi_skipped = sum((r.checkins_skipped or 0) for r in logs if r.unit in unit_set)
+	kpi_unmapped = sum((r.employees_not_found or 0) for r in logs if r.unit in unit_set)
+	kpi_errored = sum((r.errored_count or 0) for r in logs if r.unit in unit_set)
+	kpi_api_err = sum(1 for r in logs if r.unit in unit_set and (r.status or "") == "Error")
+	healthy = sum(1 for u in all_units if _row_status(latest.get(u)) == "success")
 
 	last_sync = None
 	for row in logs:
@@ -160,21 +162,21 @@ def get_dashboard_data(sync_date):
 	# One table row per configured unit
 	table_rows = []
 	for unit in all_units:
-		log    = latest.get(unit)
+		log = latest.get(unit)
 		status = _row_status(log)
 
 		raw_records = (log.total_records_received or 0) if log else None
-		total    = (log.employees_total or 0)     if log else None
-		created  = (log.checkins_created or 0)    if log else None
-		skipped  = (log.checkins_skipped or 0)    if log else None
+		total = (log.employees_total or 0) if log else None
+		created = (log.checkins_created or 0) if log else None
+		skipped = (log.checkins_skipped or 0) if log else None
 		unmapped = (log.employees_not_found or 0) if log else None
-		errored  = (log.errored_count or 0)       if log else None
-		inactive = (log.skipped_inactive or 0)    if log else None
+		errored = (log.errored_count or 0) if log else None
+		inactive = (log.skipped_inactive or 0) if log else None
 
 		# Progress = % of received data that processed cleanly (no unmapped / errored)
 		progress = None
 		if total:
-			clean    = max(total - (unmapped or 0) - (errored or 0), 0)
+			clean = max(total - (unmapped or 0) - (errored or 0), 0)
 			progress = round(clean / total * 100, 1)
 
 		table_rows.append(
@@ -226,7 +228,7 @@ def get_trend_data():
 
 	_s, server_type, _u, _a = _settings()
 
-	end   = getdate(today())
+	end = getdate(today())
 	start = add_days(end, -6)
 
 	rows = frappe.db.sql(
@@ -284,11 +286,11 @@ def get_failure_breakdown(sync_date):
 	t = row[0] if row else {}
 
 	categories = [
-		{"category": _("Unmapped Employees"),  "count": int(t.get("unmapped")       or 0)},
-		{"category": _("API / SOAP Error"),     "count": int(t.get("api_errors")     or 0)},
-		{"category": _("Insert Error"),         "count": int(t.get("insert_errors")  or 0)},
-		{"category": _("Inactive Employees"),   "count": int(t.get("inactive")       or 0)},
-		{"category": _("Duplicate Punch"),      "count": int(t.get("duplicates")     or 0)},
+		{"category": _("Unmapped Employees"), "count": int(t.get("unmapped") or 0)},
+		{"category": _("API / SOAP Error"), "count": int(t.get("api_errors") or 0)},
+		{"category": _("Insert Error"), "count": int(t.get("insert_errors") or 0)},
+		{"category": _("Inactive Employees"), "count": int(t.get("inactive") or 0)},
+		{"category": _("Duplicate Punch"), "count": int(t.get("duplicates") or 0)},
 	]
 	result = [c for c in categories if c["count"] > 0]
 	result.sort(key=lambda x: x["count"], reverse=True)
@@ -311,7 +313,7 @@ def get_unit_history(unit, from_date, to_date):
 	_s, server_type, unit_col, _a = _settings()
 
 	logs = frappe.db.sql(
-		"""
+		f"""
 		SELECT
 			name,
 			sync_date,
@@ -329,7 +331,7 @@ def get_unit_history(unit, from_date, to_date):
 		  AND sync_date BETWEEN %(from_date)s AND %(to_date)s
 		  AND server_type = %(server_type)s
 		ORDER BY sync_date DESC, modified DESC
-		""".format(unit_col=unit_col),
+		""",
 		{"unit": unit, "from_date": from_date, "to_date": to_date, "server_type": server_type},
 		as_dict=True,
 	)
@@ -345,45 +347,45 @@ def get_unit_history(unit, from_date, to_date):
 
 	rows = []
 	for r in unique_logs:
-		status   = _row_status(r)
-		total    = r.employees_total or 0
+		status = _row_status(r)
+		total = r.employees_total or 0
 		unmapped = r.employees_not_found or 0
-		errored  = r.errored_count or 0
+		errored = r.errored_count or 0
 
 		progress = None
 		if total:
-			clean    = max(total - unmapped - errored, 0)
+			clean = max(total - unmapped - errored, 0)
 			progress = round(clean / total * 100, 1)
 
 		rows.append(
 			{
-				"log_name":          r.name,
-				"sync_date":         str(r.sync_date),
-				"status":            status,
-				"raw_records":       r.total_records_received or 0,
-				"total":             total,
-				"created":           r.checkins_created  or 0,
-				"skipped":           r.checkins_skipped  or 0,
+				"log_name": r.name,
+				"sync_date": str(r.sync_date),
+				"status": status,
+				"raw_records": r.total_records_received or 0,
+				"total": total,
+				"created": r.checkins_created or 0,
+				"skipped": r.checkins_skipped or 0,
 				"unmapped_employees": unmapped,
-				"errored":           errored,
-				"progress":          progress,
+				"errored": errored,
+				"progress": progress,
 				"has_response_data": bool(r.has_response_data),
 			}
 		)
 
 	from_d = getdate(from_date)
-	to_d   = getdate(to_date)
+	to_d = getdate(to_date)
 
 	summary = {
-		"days_in_range":      (to_d - from_d).days + 1,
-		"days_synced":        len(rows),
-		"days_ok":            sum(1 for r in rows if r["status"] == "success"),
-		"total_raw_records":  sum(r["raw_records"] for r in rows),
-		"employees_total":    sum(r["total"] for r in rows),
-		"created":            sum(r["created"] for r in rows),
-		"skipped":            sum(r["skipped"] for r in rows),
-		"unmapped":           sum(r["unmapped_employees"] for r in rows),
-		"errored":            sum(r["errored"] for r in rows),
+		"days_in_range": (to_d - from_d).days + 1,
+		"days_synced": len(rows),
+		"days_ok": sum(1 for r in rows if r["status"] == "success"),
+		"total_raw_records": sum(r["raw_records"] for r in rows),
+		"employees_total": sum(r["total"] for r in rows),
+		"created": sum(r["created"] for r in rows),
+		"skipped": sum(r["skipped"] for r in rows),
+		"unmapped": sum(r["unmapped_employees"] for r in rows),
+		"errored": sum(r["errored"] for r in rows),
 	}
 
 	return {
@@ -404,7 +406,7 @@ def get_log_detail(log_name):
 	"""Full log metadata for the detail drawer — uses direct columns, no JSON parse for counts."""
 	frappe.only_for("System Manager")
 
-	doc     = frappe.get_doc("Biometric Sync Log", log_name)
+	doc = frappe.get_doc("Biometric Sync Log", log_name)
 	summary = {}
 	if doc.sync_summary:
 		try:
@@ -445,12 +447,12 @@ def get_log_detail(log_name):
 		"is_missing_date_sync": doc.is_missing_date_sync,
 		# --- direct columns (no JSON parsing needed for counts) ---
 		"total_records_received": doc.total_records_received or 0,
-		"employees_total":        doc.employees_total        or 0,
-		"checkins_created":       doc.checkins_created       or 0,
-		"checkins_skipped":       doc.checkins_skipped       or 0,
-		"employees_not_found":    doc.employees_not_found    or 0,
-		"errored_count":          doc.errored_count          or 0,
-		"skipped_inactive":       doc.skipped_inactive       or 0,
+		"employees_total": doc.employees_total or 0,
+		"checkins_created": doc.checkins_created or 0,
+		"checkins_skipped": doc.checkins_skipped or 0,
+		"employees_not_found": doc.employees_not_found or 0,
+		"errored_count": doc.errored_count or 0,
+		"skipped_inactive": doc.skipped_inactive or 0,
 		"has_response_data": bool(doc.response_data),
 		# --- lists from summary (needed for detail drawer chips) ---
 		"summary": summary,
@@ -515,9 +517,7 @@ def get_employee_history(employee, from_date, to_date):
 	"""
 	frappe.only_for("System Manager")
 
-	emp = frappe.db.get_value(
-		"Employee", employee, ["employee_name", "attendance_device_id"], as_dict=True
-	)
+	emp = frappe.db.get_value("Employee", employee, ["employee_name", "attendance_device_id"], as_dict=True)
 	if not emp:
 		frappe.throw(_("Employee {0} not found").format(employee))
 
@@ -575,7 +575,7 @@ def get_employee_history(employee, from_date, to_date):
 				seen_dates.add(d)
 
 	from_d = getdate(from_date)
-	to_d   = getdate(to_date)
+	to_d = getdate(to_date)
 
 	rows = []
 	d = from_d
@@ -620,7 +620,7 @@ def retry_api(log_name):
 	if not doc.sync_date:
 		frappe.throw(_("Cannot retry: log has no sync_date."))
 
-	settings    = frappe.get_single("Biometric Sync Settings")
+	settings = frappe.get_single("Biometric Sync Settings")
 	server_type = settings.server_type or "Bio Server"
 
 	kwargs = (
@@ -654,20 +654,20 @@ def retry_checkin_creation(log_name):
 
 	stats = _process_response(doc.server_type, doc.response_data, serial_no=doc.serial_no or None)
 
-	doc.employees_total     = stats.get("employees_total", 0)
-	doc.checkins_created    = (doc.checkins_created or 0) + stats.get("created", 0)
-	doc.checkins_skipped    = (doc.checkins_skipped or 0) + stats.get("skipped_duplicate", 0)
+	doc.employees_total = stats.get("employees_total", 0)
+	doc.checkins_created = (doc.checkins_created or 0) + stats.get("created", 0)
+	doc.checkins_skipped = (doc.checkins_skipped or 0) + stats.get("skipped_duplicate", 0)
 	doc.employees_not_found = len(stats.get("skipped_no_employee", []))
-	doc.errored_count       = len(stats.get("errored_employees", []))
-	doc.skipped_inactive    = len(stats.get("skipped_inactive", []))
-	doc.sync_summary        = json.dumps(stats, separators=(",", ":"))
+	doc.errored_count = len(stats.get("errored_employees", []))
+	doc.skipped_inactive = len(stats.get("skipped_inactive", []))
+	doc.sync_summary = json.dumps(stats, separators=(",", ":"))
 	doc.save(ignore_permissions=True)
 
 	return {
-		"created":            stats.get("created", 0),
-		"skipped_duplicate":  stats.get("skipped_duplicate", 0),
+		"created": stats.get("created", 0),
+		"skipped_duplicate": stats.get("skipped_duplicate", 0),
 		"employees_not_found": doc.employees_not_found,
-		"errored_count":       doc.errored_count,
+		"errored_count": doc.errored_count,
 	}
 
 
@@ -679,7 +679,7 @@ def trigger_missing_date_sync(unit, sync_date):
 	"""
 	frappe.only_for("System Manager")
 
-	settings    = frappe.get_single("Biometric Sync Settings")
+	settings = frappe.get_single("Biometric Sync Settings")
 	server_type = settings.server_type or "Bio Server"
 
 	kwargs = (
