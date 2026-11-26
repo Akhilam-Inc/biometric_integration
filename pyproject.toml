@@ -4,12 +4,16 @@ authors = [
     { name = "Akhilam Inc.", email = "parth@akhilaminc.com"}
 ]
 description = "Biometric Integration"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [
-    # "frappe~=15.0.0" # Installed and managed by bench.
+    # "frappe~=16.0.0" # Installed and managed by bench.
 ]
+
+[tool.bench.frappe-dependencies]
+frappe = ">=16.0.0,<17.0.0"
+hrms = ">=16.0.0,<17.0.0"
 
 [build-system]
 requires = ["flit_core >=3.4,<4"]
@@ -21,7 +25,7 @@ build-backend = "flit_core.buildapi"
 
 [tool.ruff]
 line-length = 110
-target-version = "py310"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = [

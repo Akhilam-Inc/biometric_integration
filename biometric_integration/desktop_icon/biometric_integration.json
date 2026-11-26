@@ -5,7 +5,7 @@
  "docstatus": 0,
  "doctype": "Desktop Icon",
  "hidden": 0,
- "icon_image": "/private/files/fingerprint.png",
+ "icon_image": "/assets/biometric_integration/biometric.png",
  "icon_type": "Link",
  "idx": 0,
  "label": "Biometric Integration",
